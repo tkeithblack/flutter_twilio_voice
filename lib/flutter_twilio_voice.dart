@@ -100,48 +100,49 @@ class FlutterTwilioVoice {
     return callDirection;
   }
 
-  static CallState _parseCallState(String state) {
-    if (state.startsWith("Connected|")) {
-      List<String> tokens = state.split('|');
-      callFrom = _prettyPrintNumber(tokens[1]);
-      callTo = _prettyPrintNumber(tokens[2]);
-      callDirection = ("Incoming" == tokens[3] ? CallDirection.incoming : CallDirection.outgoing);
-      if (callStartedOn == null) {
-        callStartedOn = DateTime.now().millisecondsSinceEpoch;
-      }
-      print('Connected - From: $callFrom, To: $callTo, StartOn: $callStartedOn, Direction: $callDirection');
-      return CallState.connected;
-    } else if (state.startsWith("Ringing|")) {
-      List<String> tokens = state.split('|');
-      callFrom = _prettyPrintNumber(tokens[1]);
-      callTo = _prettyPrintNumber(tokens[2]);
-      callDirection = ("Incoming" == tokens[3] ? CallDirection.incoming : CallDirection.outgoing);
-      callStartedOn = DateTime.now().millisecondsSinceEpoch;
-      print('Ringing - From: $callFrom, To: $callTo, StartOn: $callStartedOn, Direction: $callDirection');
-      return CallState.ringing;
-    }
+  static CallState _parseCallState(Map<dynamic, dynamic> json) {
+    var state = json['event'];
+
     switch (state) {
-      case 'Ringing':
-        return CallState.ringing;
-      case 'Connected':
+      case "connected":
+        callFrom = _prettyPrintNumber(json["from"]);
+        callTo = _prettyPrintNumber(json["to"]);
+        callDirection = "incoming" == json["direction"]
+            ? CallDirection.incoming
+            : CallDirection.outgoing;
+        if (callStartedOn == null) {
+          callStartedOn = DateTime.now().millisecondsSinceEpoch;
+        }
+        print(
+            'Connected - From: $callFrom, To: $callTo, StartOn: $callStartedOn, Direction: $callDirection');
         return CallState.connected;
-      case 'Call Ended':
+      case "ringing":
+        callFrom = _prettyPrintNumber(json["from"]);
+        callTo = _prettyPrintNumber(json["to"]);
+        callDirection = "incoming" == json["direction"]
+            ? CallDirection.incoming
+            : CallDirection.outgoing;
+        callStartedOn = DateTime.now().millisecondsSinceEpoch;
+        print(
+            'Ringing - From: $callFrom, To: $callTo, StartOn: $callStartedOn, Direction: $callDirection');
+        return CallState.ringing;
+      case "call_ended":
         callStartedOn = null;
         callFrom = "SafeNSound";
         callTo = "SafeNSound";
         callDirection = CallDirection.incoming;
         return CallState.call_ended;
-      case 'Unhold':
+      case "unhold":
         return CallState.unhold;
-      case 'Hold':
+      case "hold":
         return CallState.hold;
-      case 'Unmute':
+      case "unmute":
         return CallState.unmute;
-      case 'Mute':
+      case "mute":
         return CallState.mute;
-      case 'Speaker On':
+      case "speaker_on":
         return CallState.speaker_on;
-      case 'Speaker Off':
+      case "speaker_of":
         return CallState.speaker_off;
       default:
         print('$state is not a valid CallState.');

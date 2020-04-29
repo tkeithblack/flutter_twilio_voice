@@ -5,12 +5,28 @@ import PushKit
 import TwilioVoice
 import CallKit
 
+enum CallState: String {
+    case ringing        = "ringing"
+    case connected      = "connected"
+    case call_ended     = "call_ended"
+    case unhold         = "unhold"
+    case hold           = "hold"
+    case unmute         = "unmute"
+    case mute           = "mute"
+    case speaker_on     = "speaker_on"
+    case speaker_off    = "speaker_off"
+}
+enum CallDirection: String {
+    case incoming = "incoming"
+    case outgoing = "outgoing"
+}
+
 public class SwiftFlutterTwilioVoicePlugin: NSObject, FlutterPlugin,  FlutterStreamHandler, PKPushRegistryDelegate, TVONotificationDelegate, TVOCallDelegate, AVAudioPlayerDelegate, CXProviderDelegate {
 
     var _result: FlutterResult?
     private var eventSink: FlutterEventSink?
 
-    //var baseURLString = ""
+    //var baseURLString = ˝""
     // If your token server is written in PHP, accessTokenEndpoint needs .php extension at the end. For example : /accessToken.php
     //var accessTokenEndpoint = "/accessToken"
     var accessToken:String?
@@ -79,6 +95,19 @@ public class SwiftFlutterTwilioVoicePlugin: NSObject, FlutterPlugin,  FlutterStr
       }
 
 
+    var audioDeviceInitialized = false
+    func initAudioDevice() {
+        /*
+         * The important thing to remember when providing a TVOAudioDevice is that the device must be set
+         * before performing any other actions with the SDK (such as connecting a Call, or accepting an incoming Call).
+         * This function will make sure we do not initialize the audioDevice more than once.
+         */
+        if !audioDeviceInitialized {
+            audioDeviceInitialized = true
+            TwilioVoice.audioDevice = audioDevice
+        }
+    }
+
   public static func register(with registrar: FlutterPluginRegistrar) {
 
     let instance = SwiftFlutterTwilioVoicePlugin()
@@ -98,6 +127,7 @@ public class SwiftFlutterTwilioVoicePlugin: NSObject, FlutterPlugin,  FlutterStr
         guard let token = arguments["accessToken"] as? String else {return}
         self.accessToken = token
         if let deviceToken = deviceTokenString, let token = accessToken {
+            initAudioDevice();
             NSLog("pushRegistry:attempting to register with twilio")
             TwilioVoice.register(withAccessToken: token, deviceToken: deviceToken) { (error) in
                 if let error = error {
@@ -114,8 +144,6 @@ public class SwiftFlutterTwilioVoicePlugin: NSObject, FlutterPlugin,  FlutterStr
         let callToDisplayName:String = arguments["toDisplayName"] as? String ?? callTo
         self.callArgs = arguments
         self.callOutgoing = true
-        //guard let accessTokenUrl = arguments["accessTokenUrl"] as? String else {return}
-        //self.accessTokenEndpoint = accessTokenUrl
         self.callTo = callTo
         self.identity = callFrom
         makeCall(to: callTo, displayName: callToDisplayName)
@@ -125,10 +153,7 @@ public class SwiftFlutterTwilioVoicePlugin: NSObject, FlutterPlugin,  FlutterStr
         if (self.call != nil) {
            let muted = self.call!.isMuted
            self.call!.isMuted = !muted
-           guard let eventSink = eventSink else {
-               return
-           }
-           eventSink(!muted ? "Mute" : "Unmute")
+           sendPhoneCallEvents(json: ["event": !muted ? CallState.mute.rawValue : CallState.unmute.rawValue])
         } else {
             let ferror: FlutterError = FlutterError(code: "MUTE_ERROR", message: "No call to be muted", details: nil)
             _result!(ferror)
@@ -138,10 +163,7 @@ public class SwiftFlutterTwilioVoicePlugin: NSObject, FlutterPlugin,  FlutterStr
     {
         guard let speakerIsOn = arguments["speakerIsOn"] as? Bool else {return}
         toggleAudioRoute(toSpeaker: speakerIsOn)
-        guard let eventSink = eventSink else {
-            return
-        }
-        eventSink(speakerIsOn ? "Speaker On" : "Speaker Off")
+        sendPhoneCallEvents(json: ["event": speakerIsOn ? CallState.speaker_on.rawValue : CallState.speaker_off.rawValue])
     }
     else if flutterCall.method == "isOnCall"
         {
@@ -165,10 +187,7 @@ public class SwiftFlutterTwilioVoicePlugin: NSObject, FlutterPlugin,  FlutterStr
 
             let hold = self.call!.isOnHold
             self.call!.isOnHold = !hold
-            guard let eventSink = eventSink else {
-                return
-            }
-            eventSink(!hold ? "Hold" : "Unhold")
+           sendPhoneCallEvents(json: ["event": !hold ? CallState.hold.rawValue : CallState.unhold.rawValue])
         }
     }
     else if flutterCall.method == "answer" {
@@ -376,6 +395,7 @@ public class SwiftFlutterTwilioVoicePlugin: NSObject, FlutterPlugin,  FlutterStr
     public func callInviteReceived(_ ci: TVOCallInvite) {
             NSLog("callInviteReceived:")
 
+            initAudioDevice();
             var from:String = ci.from ?? "Voice Bot"
             from = from.replacingOccurrences(of: "client:", with: "")
 
@@ -401,23 +421,17 @@ public class SwiftFlutterTwilioVoicePlugin: NSObject, FlutterPlugin,  FlutterStr
         let direction = (self.callOutgoing ? "Outgoing" : "Incoming")
         let from = (call.from ?? self.identity)
         let to = (call.to ?? self.callTo)
-        sendPhoneCallEvents(description: "Ringing|\(from)|\(to)|\(direction)", isError: false)
-
-            //self.placeCallButton.setTitle("Ringing", for: .normal)
+        sendPhoneCallEvents(json: ["event": CallState.ringing.rawValue, "from": from, "to": to, "direction": direction])
         }
 
     public func callDidConnect(_ call: TVOCall) {
             let direction = (self.callOutgoing ? "Outgoing" : "Incoming")
             let from = (call.from ?? self.identity)
             let to = (call.to ?? self.callTo)
-            sendPhoneCallEvents(description: "Connected|\(from)|\(to)|\(direction)", isError: false)
+            sendPhoneCallEvents(json: ["event": CallState.connected.rawValue, "from": from, "to": to, "direction": direction])
 
             self.callKitCompletionCallback!(true)
 
-            //self.placeCallButton.setTitle("Hang Up", for: .normal)
-
-            //toggleUIState(isEnabled: true, showCallControl: true)
-            //stopSpin()
             toggleAudioRoute(toSpeaker: false)
         }
 
@@ -449,9 +463,9 @@ public class SwiftFlutterTwilioVoicePlugin: NSObject, FlutterPlugin,  FlutterStr
         }
 
     public func call(_ call: TVOCall, didDisconnectWithError error: Error?) {
-            self.sendPhoneCallEvents(description: "Call Ended", isError: false)
+            sendPhoneCallEvents(json: ["event": CallState.call_ended.rawValue])
             if let error = error {
-                self.sendPhoneCallEvents(description: "Call Failed: \(error.localizedDescription)", isError: true)
+                self.sendErrorEvent(message: "Call Failed: \(error.localizedDescription)")
             }
 
             if !self.userInitiatedDisconnect {
@@ -663,9 +677,9 @@ public class SwiftFlutterTwilioVoicePlugin: NSObject, FlutterPlugin,  FlutterStr
 
             callKitCallController.request(transaction) { error in
                 if let error = error {
-                    self.sendPhoneCallEvents(description: "End Call Failed: \(error.localizedDescription).", isError: true)
+                    self.sendErrorEvent(message: "End Call Failed: \(error.localizedDescription).")
                 } else {
-                    self.sendPhoneCallEvents(description: "Call Ended", isError: false)
+                    self.sendPhoneCallEvents(json: ["event": CallState.call_ended.rawValue])
                 }
             }
         }
@@ -728,26 +742,23 @@ public class SwiftFlutterTwilioVoicePlugin: NSObject, FlutterPlugin,  FlutterStr
         return nil
     }
 
-    private func sendPhoneCallEvents(description: String, isError: Bool) {
-        NSLog(description)
+    private func sendPhoneCallEvents(json: [String: Any]) {
+        NSLog("Call Event: \(json)")
         guard let eventSink = eventSink else {
             return
         }
-
-        if isError
-        {
-            eventSink(FlutterError(code: "unavailable",
-                                   message: description,
-                                   details: nil))
-        }
-        else
-        {
-            eventSink(description)
-        }
+        eventSink(json)
     }
 
-
-
+    private func sendErrorEvent(message: String, details: String?=nil) {
+        NSLog(message)
+        guard let eventSink = eventSink else {
+            return
+        }
+        eventSink(FlutterError(code: "unavailable",
+                                message: message,
+                                details: details))
+    }
 }
 
 extension UIWindow {
