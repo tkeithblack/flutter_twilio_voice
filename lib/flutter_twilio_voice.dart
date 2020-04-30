@@ -19,8 +19,8 @@ class FlutterTwilioVoice {
   static const EventChannel _eventChannel = EventChannel('flutter_twilio_voice/events');
 
   static Stream<CallState> _onCallStateChanged;
-  static String callFrom = "SafeNSound";
-  static String callTo = "SafeNSound";
+  static String callFrom;
+  static String callTo;
   static String sid;
   static bool   muted;
   static bool   onHold; 
@@ -187,8 +187,8 @@ class FlutterTwilioVoice {
         return CallState.connect_failed;
       case "call_ended":
         callStartedOn = null;
-        callFrom = "SafeNSound";
-        callTo = "SafeNSound";
+        callFrom = null;
+        callTo = null;
         callDirection = CallDirection.incoming;
         callActionsDelegates.forEach((delegate) { 
           delegate.callEnded(errorMsg: json["error"]); 
