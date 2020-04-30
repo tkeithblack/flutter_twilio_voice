@@ -14,46 +14,37 @@ class FlutterTwilioVoice {
   static final String ACTION_CANCEL_CALL = "ACTION_CANCEL_CALL";
   static final String ACTION_FCM_TOKEN = "ACTION_FCM_TOKEN";
 
-  static const MethodChannel _channel = const MethodChannel('flutter_twilio_voice/messages');
+  final MethodChannel _channel = const MethodChannel('flutter_twilio_voice/messages');
 
-  static const EventChannel _eventChannel = EventChannel('flutter_twilio_voice/events');
+  final EventChannel _eventChannel = EventChannel('flutter_twilio_voice/events');
 
-  static Stream<CallState> _onCallStateChanged;
-  static String callFrom;
-  static String callTo;
-  static String sid;
-  static bool   muted;
-  static bool   onHold; 
+  Stream<CallState> _onCallStateChanged;
+  String callFrom;
+  String callTo;
+  String sid;
+  bool   muted;
+  bool   onHold; 
 
-  static int callStartedOn;
-  static CallDirection callDirection = CallDirection.incoming;
-  static var callActionsDelegates = List<FlutterTwilioVoice>(); 
+  int callStartedOn;
+  CallDirection callDirection = CallDirection.incoming;
 
-  static void setDelegate({FlutterTwilioVoice delegate}) {
-    callActionsDelegates.add(delegate);
-  }
-
-  static void removeDelegate({FlutterTwilioVoice delegate}) {
-    callActionsDelegates.remove(delegate);
-  }
-
-  static Stream<CallState> get onCallStateChanged {
+  Stream<CallState> get onCallStateChanged {
     if (_onCallStateChanged == null) {
       _onCallStateChanged = _eventChannel.receiveBroadcastStream().map((dynamic event) => _parseCallState(event));
     }
     return _onCallStateChanged;
   }
 
-  static Future<bool> tokens({@required String accessToken, @required String fcmToken}) {
+  Future<bool> tokens({@required String accessToken, @required String fcmToken}) {
     assert(accessToken != null);
     return _channel.invokeMethod('tokens', <String, dynamic>{"accessToken": accessToken, "fcmToken": fcmToken});
   }
 
-  static Future<bool> unregister() {
+  Future<bool> unregister() {
     return _channel.invokeMethod('unregister', <String, dynamic>{});
   }
 
-  static Future<bool> makeCall(
+  Future<bool> makeCall(
       {@required String from, @required String to, String toDisplayName, Map<String, dynamic> extraOptions}) {
     assert(to != null);
     assert(from != null);
@@ -67,156 +58,138 @@ class FlutterTwilioVoice {
     return _channel.invokeMethod('makeCall', options);
   }
 
-  static Future<bool> hangUp() {
+  Future<bool> hangUp() {
     return _channel.invokeMethod('hangUp', <String, dynamic>{});
   }
 
-  static Future<bool> answer() {
+  Future<bool> answer() {
     return _channel.invokeMethod('answer', <String, dynamic>{});
   }
 
-  static Future<bool> holdCall() {
+  Future<bool> holdCall() {
     return _channel.invokeMethod('holdCall', <String, dynamic>{});
   }
 
-  static Future<bool> muteCall() {
+  Future<bool> muteCall() {
     return _channel.invokeMethod('muteCall', <String, dynamic>{});
   }
 
-  static Future<bool> toggleSpeaker(bool speakerIsOn) {
+  Future<bool> toggleSpeaker(bool speakerIsOn) {
     assert(speakerIsOn != null);
     return _channel.invokeMethod('toggleSpeaker', <String, dynamic>{"speakerIsOn": speakerIsOn});
   }
 
-  static Future<bool> sendDigits(String digits) {
+  Future<bool> sendDigits(String digits) {
     assert(digits != null);
     return _channel.invokeMethod('sendDigits', <String, dynamic>{"digits": digits});
   }
 
-  static Future<bool> isOnCall() {
+  Future<bool> isOnCall() {
     return _channel.invokeMethod('isOnCall', <String, dynamic>{});
   }
 
-  static String getFrom() {
+  String getFrom() {
     return callFrom;
   }
 
-  static String getTo() {
+  String getTo() {
     return callTo;
   }
 
-  static DateTime get callStartDate {
+  DateTime get callStartDate {
     return DateTime.fromMillisecondsSinceEpoch(callStartedOn);
   }
 
   // same as getFrom in getter form
-  static String get fromNumber {
+  String get fromNumber {
     return callFrom;
   }
 
   // same as getTo in getter form
-  static String get toNumber {
+  String get toNumber {
     return callTo;
   }
 
-  static String get callSid {
+  String get callSid {
     return sid;
   }
 
-  static bool get isMuted {
+  bool get isMuted {
     return muted;
   }
 
-  static bool get isOnHold {
+  bool get isOnHold {
     return onHold;
   }
 
-  static int getCallStartedOn() {
+  int getCallStartedOn() {
     return callStartedOn;
   }
 
-  static CallDirection getCallDirection() {
+  CallDirection getCallDirection() {
     return callDirection;
   }
 
-  static CallState _parseCallState(Map<dynamic, dynamic> json) {
+  CallState _parseCallState(Map<dynamic, dynamic> json) {
     var state = json['event'];
 
     switch (state) {
       case "call_invite":
         _setCallInfoFromJson(json: json);
         callStartedOn = DateTime.now().millisecondsSinceEpoch;
-        callActionsDelegates.forEach((delegate) { 
-          delegate.callInvite(customParameters: json["customParameters"]); 
-        });
+        callInvite(customParameters: json["customParameters"]); 
         return CallState.call_invite;
       case "call_invite_canceled":
         _setCallInfoFromJson(json: json);
         callStartedOn = DateTime.now().millisecondsSinceEpoch;
-        callActionsDelegates.forEach((delegate) { 
-          delegate.callInviteCancel(customParameters: json["customParameters"]); 
-        });
+        callInviteCancel(customParameters: json["customParameters"]); 
         return CallState.call_invite_canceled;
-      case "connected":
-      _setCallInfoFromJson(json: json);
-        if (callStartedOn == null) {
-          callStartedOn = DateTime.now().millisecondsSinceEpoch;
-        }
-        callActionsDelegates.forEach((delegate) { delegate.callDidConnect(); });
-        return CallState.connected;
       case "ringing":
         _setCallInfoFromJson(json: json);
         callStartedOn = DateTime.now().millisecondsSinceEpoch;
-        callActionsDelegates.forEach((delegate) { delegate.callDidStartRinging(); });
+        callDidStartRinging();
         return CallState.ringing;
+      case "connected":
+        _setCallInfoFromJson(json: json);
+        if (callStartedOn == null) {
+          callStartedOn = DateTime.now().millisecondsSinceEpoch;
+        }
+        callDidConnect();
+        return CallState.connected;
       case "reconnecting":
         _setCallInfoFromJson(json: json);
-        callActionsDelegates.forEach((delegate) { 
-          delegate.callReconnecting(errorMsg: json["error"]); 
-        }); 
+        callReconnecting(errorMsg: json["error"]); 
         return CallState.reconnecting;
       case "reconnected":
         _setCallInfoFromJson(json: json);
-        callActionsDelegates.forEach((delegate) { delegate.callReconnected(); });
+        callReconnected();
         return CallState.reconnected;
       case "connect_failed":
         _setCallInfoFromJson(json: json);
-        callActionsDelegates.forEach((delegate) { 
-          delegate.callConnectFailed(errorMsg: json["error"]); 
-        }); 
+        callConnectFailed(errorMsg: json["error"]); 
         return CallState.connect_failed;
       case "call_ended":
         callStartedOn = null;
         callFrom = null;
         callTo = null;
         callDirection = CallDirection.incoming;
-        callActionsDelegates.forEach((delegate) { 
-          delegate.callEnded(errorMsg: json["error"]); 
-        }); 
+        callEnded(errorMsg: json["error"]); 
         return CallState.call_ended;
       case "unhold":
         onHold = false;
-        callActionsDelegates.forEach((delegate) { 
-          delegate.callHoldChanged(isOnHold: onHold); 
-        }); 
+        callHoldChanged(isOnHold: onHold); 
         return CallState.unhold;
       case "hold":
         onHold = true;
-        callActionsDelegates.forEach((delegate) { 
-          delegate.callHoldChanged(isOnHold: onHold); 
-        }); 
+        callHoldChanged(isOnHold: onHold); 
         return CallState.hold;
       case "unmute":
         muted = false;
-        callActionsDelegates.forEach((delegate) { 
-          delegate.callMuteChanged(isMuted: muted); 
-        }); 
+        callMuteChanged(isMuted: muted); 
         return CallState.unmute;
       case "mute":
         muted = true;
-        callActionsDelegates.forEach((delegate) { 
-          delegate.callMuteChanged(isMuted: muted); 
-        }); 
+        callMuteChanged(isMuted: muted); 
         return CallState.mute;
       case "speaker_on":
         // TODO: Need to study audio routes further to handle bluetooh etc.
@@ -229,7 +202,7 @@ class FlutterTwilioVoice {
     }
   }
 
-  static _setCallInfoFromJson({Map<dynamic, dynamic> json}){
+  void _setCallInfoFromJson({Map<dynamic, dynamic> json}){
     callFrom = _prettyPrintNumber(json["from"]);
     callTo = _prettyPrintNumber(json["to"]);
     sid = json['sid'];
@@ -240,7 +213,7 @@ class FlutterTwilioVoice {
         : CallDirection.outgoing;
   }
 
-  static String _prettyPrintNumber(String phoneNumber) {
+  String _prettyPrintNumber(String phoneNumber) {
     if (phoneNumber.indexOf('client:') > -1) {
       return phoneNumber.split(':')[1];
     }
