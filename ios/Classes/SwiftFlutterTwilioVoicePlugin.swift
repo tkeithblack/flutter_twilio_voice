@@ -6,15 +6,20 @@ import TwilioVoice
 import CallKit
 
 enum CallState: String {
-    case ringing        = "ringing"
-    case connected      = "connected"
-    case call_ended     = "call_ended"
-    case unhold         = "unhold"
-    case hold           = "hold"
-    case unmute         = "unmute"
-    case mute           = "mute"
-    case speaker_on     = "speaker_on"
-    case speaker_off    = "speaker_off"
+    case ringing                = "ringing"
+    case connected              = "connected"
+    case reconnecting           = "reconnecting"
+    case reconnected            = "reconnected"
+    case call_invite            = "call_invite"
+    case call_invite_canceled   = "call_invite_canceled"
+    case connectFailed          = "connect_failed"
+    case call_ended             = "call_ended"
+    case unhold                 = "unhold"
+    case hold                   = "hold"
+    case unmute                 = "unmute"
+    case mute                   = "mute"
+    case speaker_on             = "speaker_on"
+    case speaker_off            = "speaker_off"
 }
 enum CallDirection: String {
     case incoming = "incoming"
@@ -401,6 +406,12 @@ public class SwiftFlutterTwilioVoicePlugin: NSObject, FlutterPlugin,  FlutterStr
 
             reportIncomingCall(from: from, uuid: ci.uuid)
             self.callInvite = ci
+                
+            var inviteInfo:[String : Any] = ["event": CallState.call_invite.rawValue, "from": ci.from ?? "", "to": ci.to, "direction": "Incoming", "sid": ci.callSid];
+            if let parameters = ci.customParameters {
+                inviteInfo.updateValue(parameters, forKey: "customParameters")
+            }
+            sendPhoneCallEvents(json: inviteInfo)
         }
 
     public func cancelledCallInviteReceived(_ cancelledCallInvite: TVOCancelledCallInvite, error: Error) {
@@ -414,44 +425,52 @@ public class SwiftFlutterTwilioVoicePlugin: NSObject, FlutterPlugin,  FlutterStr
             if let ci = self.callInvite {
                 performEndCallAction(uuid: ci.uuid)
             }
+        
+            let ci = cancelledCallInvite;
+            var inviteInfo:[String : Any] = ["event": CallState.call_invite_canceled.rawValue, "from": ci.from ?? "", "to": ci.to, "direction": "Incoming", "sid": ci.callSid];
+            if let parameters = ci.customParameters {
+                inviteInfo.updateValue(parameters, forKey: "customParameters")
+            }
+            sendPhoneCallEvents(json: inviteInfo)
         }
 
         // MARK: TVOCallDelegate
     public func callDidStartRinging(_ call: TVOCall) {
-        let direction = (self.callOutgoing ? "Outgoing" : "Incoming")
-        let from = (call.from ?? self.identity)
-        let to = (call.to ?? self.callTo)
-        sendPhoneCallEvents(json: ["event": CallState.ringing.rawValue, "from": from, "to": to, "direction": direction])
+        var callInfo = callToJson(call: call);
+        callInfo.updateValue(CallState.ringing.rawValue, forKey: "event")
+        sendPhoneCallEvents(json: callInfo)
         }
 
     public func callDidConnect(_ call: TVOCall) {
-            let direction = (self.callOutgoing ? "Outgoing" : "Incoming")
-            let from = (call.from ?? self.identity)
-            let to = (call.to ?? self.callTo)
-            sendPhoneCallEvents(json: ["event": CallState.connected.rawValue, "from": from, "to": to, "direction": direction])
-
-            self.callKitCompletionCallback!(true)
-
-            toggleAudioRoute(toSpeaker: false)
-        }
-
+        var callInfo = callToJson(call: call);
+        callInfo.updateValue(CallState.connected.rawValue, forKey: "event")
+        sendPhoneCallEvents(json: callInfo)
+        
+        self.callKitCompletionCallback!(true)
+        toggleAudioRoute(toSpeaker: false)
+    }
+    
         public func call(_ call: TVOCall, isReconnectingWithError error: Error) {
+            var callInfo = callToJson(call: call);
+            callInfo.updateValue(CallState.reconnecting.rawValue, forKey: "event")
+            callInfo.updateValue(error.localizedDescription, forKey: "error")
+            sendPhoneCallEvents(json: callInfo)
             NSLog("call:isReconnectingWithError:")
-
-            //self.placeCallButton.setTitle("Reconnecting", for: .normal)
-
-            //toggleUIState(isEnabled: false, showCallControl: false)
         }
 
         public func callDidReconnect(_ call: TVOCall) {
+            var callInfo = callToJson(call: call);
+            callInfo.updateValue(CallState.reconnected.rawValue, forKey: "event")
+            sendPhoneCallEvents(json: callInfo)
             NSLog("callDidReconnect:")
-
-            //self.placeCallButton.setTitle("Hang Up", for: .normal)
-
-            //toggleUIState(isEnabled: true, showCallControl: true)
         }
 
         public func call(_ call: TVOCall, didFailToConnectWithError error: Error) {
+            var callInfo = callToJson(call: call);
+            callInfo.updateValue(CallState.connectFailed.rawValue, forKey: "event")
+            callInfo.updateValue(error.localizedDescription, forKey: "error")
+            sendPhoneCallEvents(json: callInfo)
+            
             NSLog("Call failed to connect: \(error.localizedDescription)")
 
             if let completion = self.callKitCompletionCallback {
@@ -463,7 +482,13 @@ public class SwiftFlutterTwilioVoicePlugin: NSObject, FlutterPlugin,  FlutterStr
         }
 
     public func call(_ call: TVOCall, didDisconnectWithError error: Error?) {
-            sendPhoneCallEvents(json: ["event": CallState.call_ended.rawValue])
+            var callInfo = callToJson(call: call);
+            callInfo.updateValue(CallState.call_ended.rawValue, forKey: "event")
+            if let error = error {
+                callInfo.updateValue(error.localizedDescription, forKey: "error")
+            }
+            sendPhoneCallEvents(json: callInfo)
+
             if let error = error {
                 self.sendErrorEvent(message: "Call Failed: \(error.localizedDescription)")
             }
@@ -758,6 +783,13 @@ public class SwiftFlutterTwilioVoicePlugin: NSObject, FlutterPlugin,  FlutterStr
         eventSink(FlutterError(code: "unavailable",
                                 message: message,
                                 details: details))
+    }
+    
+    internal func callToJson(call: TVOCall) -> [String : Any] {
+        let direction = (self.callOutgoing ? "Outgoing" : "Incoming")
+        let from = (call.from ?? self.identity)
+        let to = (call.to ?? self.callTo)
+        return ["from": from, "to": to, "direction": direction, "sid": call.sid, "muted": call.isMuted, "onhold": call.isOnHold];
     }
 }
 
