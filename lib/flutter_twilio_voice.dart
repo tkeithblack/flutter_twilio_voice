@@ -70,7 +70,7 @@ class FlutterTwilioVoice {
     return _channel.invokeMethod('holdCall', <String, dynamic>{});
   }
 
-  Future<bool> muteCall() {
+  Future<bool> toggleMute() {
     return _channel.invokeMethod('muteCall', <String, dynamic>{});
   }
 
@@ -88,38 +88,55 @@ class FlutterTwilioVoice {
     return _channel.invokeMethod('isOnCall', <String, dynamic>{});
   }
 
-  String getFrom() {
-    return callFrom;
+  // Legacy Methods replaced by new version ---------
+  String getFrom() {    // replaced by getter fromNumber
+    return fromNumber;
   }
+  String getTo() {       // replaced by getter toNumber
+    return toNumber;
+  }
+  // replaced by toggleMute same functionality, more intuatuve name.
+  Future<bool> muteCall() {    
+    return toggleMute();
+  }
+  // End legacy calls --------------------------------
 
-  String getTo() {
-    return callTo;
-  }
 
   DateTime get callStartDate {
-    return DateTime.fromMillisecondsSinceEpoch(callStartedOn);
+    if (callStartedOn != null)
+      return DateTime.fromMillisecondsSinceEpoch(callStartedOn);
+  
+    return null;
   }
 
   // same as getFrom in getter form
   String get fromNumber {
-    return callFrom;
+    return callFrom ?? "";;
   }
 
   // same as getTo in getter form
   String get toNumber {
-    return callTo;
+    return callTo ?? "";;
+  }
+
+  String get externalNumber {
+    return callDirection == CallDirection.incoming ? fromNumber : toNumber;  
+  }
+
+  String get internalNumber {
+    return callDirection == CallDirection.outgoing ? fromNumber : toNumber;  
   }
 
   String get callSid {
-    return sid;
+    return sid ?? "";
   }
 
   bool get isMuted {
-    return muted;
+    return muted ?? false;
   }
 
   bool get isOnHold {
-    return onHold;
+    return onHold ?? false;
   }
 
   int getCallStartedOn() {

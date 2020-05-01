@@ -159,9 +159,6 @@ public class SwiftFlutterTwilioVoicePlugin: NSObject, FlutterPlugin,  FlutterStr
            let muted = self.call!.isMuted
            self.call!.isMuted = !muted
            sendPhoneCallEvents(json: ["event": !muted ? CallState.mute.rawValue : CallState.unmute.rawValue])
-        } else {
-            let ferror: FlutterError = FlutterError(code: "MUTE_ERROR", message: "No call to be muted", details: nil)
-            _result!(ferror)
         }
     }
     else if flutterCall.method == "toggleSpeaker"
