@@ -128,7 +128,7 @@ class FlutterTwilioVoice {
   }
 
   String get callSid {
-    return sid ?? "";
+    return sid;
   }
 
   bool get isMuted {
