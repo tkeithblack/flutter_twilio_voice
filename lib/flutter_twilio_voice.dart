@@ -58,6 +58,11 @@ class FlutterTwilioVoice {
     return _channel.invokeMethod('makeCall', options);
   }
 
+    Future<bool> processIncomingVoipMessage(
+      {@required dynamic message}) {
+    return _channel.invokeMethod('incomingVoipMessage',  <String, dynamic>{"message": message});
+  }
+
   Future<bool> hangUp() {
     return _channel.invokeMethod('hangUp', <String, dynamic>{});
   }
@@ -147,50 +152,52 @@ class FlutterTwilioVoice {
     return callDirection;
   }
 
-  CallState _parseCallState(Map<dynamic, dynamic> json) {
-    var state = json['event'];
+  CallState _parseCallState(dynamic params) {
+
+    print("_parseCallState - params: $params");
+    var state = params['event'];
 
     switch (state) {
       case "call_invite":
-        _setCallInfoFromJson(json: json);
+        _setCallInfoFromParams(params: params);
         callStartedOn = DateTime.now().millisecondsSinceEpoch;
-        callInvite(customParameters: json["customParameters"]); 
+        callInvite(customParameters: params["customParameters"]); 
         return CallState.call_invite;
       case "call_invite_canceled":
-        _setCallInfoFromJson(json: json);
+        _setCallInfoFromParams(params: params);
         callStartedOn = DateTime.now().millisecondsSinceEpoch;
-        callInviteCancel(customParameters: json["customParameters"]); 
+        callInviteCancel(customParameters: params["customParameters"]); 
         return CallState.call_invite_canceled;
       case "ringing":
-        _setCallInfoFromJson(json: json);
+        _setCallInfoFromParams(params: params);
         callStartedOn = DateTime.now().millisecondsSinceEpoch;
         callDidStartRinging();
         return CallState.ringing;
       case "connected":
-        _setCallInfoFromJson(json: json);
+        _setCallInfoFromParams(params: params);
         if (callStartedOn == null) {
           callStartedOn = DateTime.now().millisecondsSinceEpoch;
         }
         callDidConnect();
         return CallState.connected;
       case "reconnecting":
-        _setCallInfoFromJson(json: json);
-        callReconnecting(errorMsg: json["error"]); 
+        _setCallInfoFromParams(params: params);
+        callReconnecting(errorMsg: params["error"]); 
         return CallState.reconnecting;
       case "reconnected":
-        _setCallInfoFromJson(json: json);
+        _setCallInfoFromParams(params: params);
         callReconnected();
         return CallState.reconnected;
       case "connect_failed":
-        _setCallInfoFromJson(json: json);
-        callConnectFailed(errorMsg: json["error"]); 
+        _setCallInfoFromParams(params: params);
+        callConnectFailed(errorMsg: params["error"]); 
         return CallState.connect_failed;
       case "call_ended":
         callStartedOn = null;
         callFrom = null;
         callTo = null;
         callDirection = CallDirection.incoming;
-        callEnded(errorMsg: json["error"]); 
+        callEnded(errorMsg: params["error"]); 
         return CallState.call_ended;
       case "unhold":
         onHold = false;
@@ -219,13 +226,20 @@ class FlutterTwilioVoice {
     }
   }
 
-  void _setCallInfoFromJson({Map<dynamic, dynamic> json}){
-    callFrom = _prettyPrintNumber(json["from"]);
-    callTo = _prettyPrintNumber(json["to"]);
-    sid = json['sid'];
-    muted = json['muted'];
-    onHold = json['onhold'];
-    callDirection = "incoming" == json["direction"]
+  void _setCallInfoFromParams({Map<dynamic, dynamic> params}){
+
+    var value;
+    
+    value = params["from"];
+    callFrom = value != null ? _prettyPrintNumber(value) : null;
+
+    value = params["to"];
+    callTo = value != null ? _prettyPrintNumber(value) : null;
+    
+    sid = params['sid'];
+    muted = params['muted'];
+    onHold = params['onhold'];
+    callDirection = "incoming" == params["direction"]
         ? CallDirection.incoming
         : CallDirection.outgoing;
   }

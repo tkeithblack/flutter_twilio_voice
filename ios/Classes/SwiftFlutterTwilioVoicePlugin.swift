@@ -562,7 +562,7 @@ public class SwiftFlutterTwilioVoicePlugin: NSObject, FlutterPlugin,  FlutterStr
         }
 
         public func provider(_ provider: CXProvider, perform action: CXStartCallAction) {
-            NSLog("provider:performStartCallAction:")
+            NSLog("provider:performCXStartCallAction:")
 
             //toggleUIState(isEnabled: false, showCallControl: false)
             //startSpin()

@@ -1,5 +1,5 @@
 package com.dormmom.flutter_twilio_voice;
-
+import com.dormmom.flutter_twilio_voice.fcm.VoiceFirebaseMessagingService;
 import com.twilio.voice.Call;
 import com.twilio.voice.CallException;
 import com.twilio.voice.CallInvite;
@@ -36,9 +36,24 @@ import io.flutter.plugin.common.EventChannel;
 import io.flutter.plugin.common.MethodCall;
 import io.flutter.plugin.common.MethodChannel;
 import io.flutter.plugin.common.PluginRegistry;
+import java.util.Map;
+
+import com.google.firebase.messaging.RemoteMessage;
+
+enum CallState {
+    ringing, connected, reconnecting, reconnected, connect_failed, call_invite, call_invite_canceled, call_ended,
+    unhold, hold, unmute, mute, speaker_on, speaker_off
+}
+
+enum CallDirection {
+    incoming, outgoing
+}
+
 
 public class FlutterTwilioVoicePlugin implements FlutterPlugin, MethodChannel.MethodCallHandler, EventChannel.StreamHandler,
   ActivityAware, PluginRegistry.NewIntentListener {
+
+    static VoiceFirebaseMessagingService vms = new VoiceFirebaseMessagingService();
 
     private static final String CHANNEL_NAME = "flutter_twilio_voice";
     private static final String TAG = "TwilioVoicePlugin";
@@ -67,6 +82,9 @@ public class FlutterTwilioVoicePlugin implements FlutterPlugin, MethodChannel.Me
     private EventChannel.EventSink eventSink;
     private String fcmToken;
     private boolean callOutgoing;
+
+    private String outgoingFromNumber;
+    private String outgoingToNumber;
 
     @Override
     public void onAttachedToEngine(FlutterPluginBinding flutterPluginBinding) {
@@ -142,12 +160,25 @@ public class FlutterTwilioVoicePlugin implements FlutterPlugin, MethodChannel.Me
         }
     }
 
-    private void showIncomingCallDialog() {
-        this.handleIncomingCall(activeCallInvite.getFrom(), activeCallInvite.getTo());
-    }
+    // private void showIncomingCallDialog() {
+    //     this.handleIncomingCall(activeCallInvite.getFrom(), activeCallInvite.getTo());
+    // }
 
     private void handleIncomingCall(String from, String to) {
-        eventSink.success("Ringing|" + from + "|" + to + "|" + (callOutgoing ? "Outgoing" : "Incoming"));
+
+        final HashMap<String, Object> params = new HashMap<>();
+        params.put("event", CallState.call_invite.name());
+        params.put("from", from);
+        params.put("to", to);
+        params.put("sid", activeCallInvite.getCallSid());
+        params.put("direction",  (callOutgoing ? CallDirection.outgoing.name() : CallDirection.incoming.name()));
+
+        Object customParameters = activeCallInvite.getCustomParameters();
+        if (customParameters != null)
+            params.put("customParameters",  customParameters);
+
+        sendPhoneCallEvents(params);
+
         SoundPoolManager.getInstance(activity).playRinging();
         /*if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) {
             showIncomingCallDialog();
@@ -160,8 +191,17 @@ public class FlutterTwilioVoicePlugin implements FlutterPlugin, MethodChannel.Me
 
     private void handleCancel() {
         //if (alertDialog != null && alertDialog.isShowing()) {
+
+        final HashMap<String, Object> params = new HashMap<>();
+        params.put("event", CallState.call_invite_canceled.name());
+        params.put("from", activeCallInvite.getFrom());
+        params.put("to", activeCallInvite.getTo());
+        params.put("sid", activeCallInvite.getCallSid());
+        params.put("direction",  CallDirection.incoming.name());
+
+        sendPhoneCallEvents(params);
+
         callOutgoing = false;
-        this.eventSink.success("Call Ended");
         SoundPoolManager.getInstance(activity).stopRinging();
             //alertDialog.cancel();
         //}
@@ -261,6 +301,8 @@ public class FlutterTwilioVoicePlugin implements FlutterPlugin, MethodChannel.Me
         if (this.accessToken != null && this.fcmToken != null) {
             Log.i(TAG, "Un-registering with FCM");
             Voice.unregister(this.accessToken, Voice.RegistrationChannel.FCM, this.fcmToken, unregistrationListener);
+            this.accessToken = null;
+            this.fcmToken = null;
         }
     }
 
@@ -327,11 +369,31 @@ public class FlutterTwilioVoicePlugin implements FlutterPlugin, MethodChannel.Me
             final HashMap<String, String> params = new HashMap<>();
             params.put("To", call.argument("to").toString());
             params.put("From", call.argument("from").toString());
+
+            Map<String, String> arguments = (Map<String, String>)call.arguments;
+            // Add optional parameters.
+            for (Map.Entry<String,String> entry : arguments.entrySet()) {
+                String key =  entry.getKey();
+                String value = entry.getValue();
+                if (key != "to" && key != "from") {
+                    params.put(key, value);
+                }
+            }
+            outgoingFromNumber = params.get("From");
+            outgoingToNumber = params.get("To");
             this.callOutgoing = true;
             final ConnectOptions connectOptions = new ConnectOptions.Builder(this.accessToken)
               .params(params)
               .build();
             this.activeCall = Voice.connect(this.activity, connectOptions, this.callListener);
+            result.success(true);
+
+        } else if (call.method.equals("incomingVoipMessage")) {
+            Log.d(TAG, "incomingVoipMessage");
+            final HashMap<String, String> params = new HashMap<>();
+            final RemoteMessage message = call.argument("message");
+
+            vms.onMessageReceived(message);
             result.success(true);
         } else {
             result.notImplemented();
@@ -403,8 +465,11 @@ public class FlutterTwilioVoicePlugin implements FlutterPlugin, MethodChannel.Me
              */
             @Override
             public void onRinging(Call call) {
-                Log.d(TAG, "Ringing");
-                eventSink.success("Ringing|" + call.getFrom() + "|" + call.getTo() + "|" + (callOutgoing ? "Outgoing" : "Incoming"));
+                Log.d(TAG, "ringing");
+
+                HashMap<String, Object> params = callToParams (call);
+                params.put("event", CallState.ringing.name());
+                sendPhoneCallEvents(params);
             }
 
             @Override
@@ -414,6 +479,11 @@ public class FlutterTwilioVoicePlugin implements FlutterPlugin, MethodChannel.Me
                 String message = String.format("Call Error: %d, %s", error.getErrorCode(), error.getMessage());
                 Log.e(TAG, message);
 
+                HashMap<String, Object> params = callToParams (call);
+                params.put("event", CallState.connect_failed.name());
+                if (error != null)
+                    params.put("error", error.getLocalizedMessage());
+                sendPhoneCallEvents(params);
             }
 
             @Override
@@ -421,17 +491,29 @@ public class FlutterTwilioVoicePlugin implements FlutterPlugin, MethodChannel.Me
                 setAudioFocus(true);
                 Log.d(TAG, "Connected");
                 activeCall = call;
-                eventSink.success("Connected|" + call.getFrom() + "|" + call.getTo() + "|" + (callOutgoing ? "Outgoing" : "Incoming"));
+
+                HashMap<String, Object> params = callToParams (call);
+                params.put("event", CallState.connected.name());
+                sendPhoneCallEvents(params);
             }
 
             @Override
             public void onReconnecting(@NonNull Call call, @NonNull CallException callException) {
                 Log.d(TAG, "onReconnecting");
+                HashMap<String, Object> params = callToParams (call);
+                params.put("event", CallState.reconnecting.name());
+                if (callException != null)
+                    params.put("error", callException.getLocalizedMessage());
+                sendPhoneCallEvents(params);
             }
 
             @Override
             public void onReconnected(@NonNull Call call) {
                 Log.d(TAG, "onReconnected");
+
+                HashMap<String, Object> params = callToParams (call);
+                params.put("event", CallState.reconnected.name());
+                sendPhoneCallEvents(params);
             }
 
             @Override
@@ -442,7 +524,15 @@ public class FlutterTwilioVoicePlugin implements FlutterPlugin, MethodChannel.Me
                     String message = String.format("Call Error: %d, %s", error.getErrorCode(), error.getMessage());
                     Log.e(TAG, message);
                 }
-                eventSink.success("Call Ended");
+
+                HashMap<String, Object> params = callToParams (call);
+                params.put("event", CallState.call_ended.name());
+                if (error != null)
+                    params.put("error", error.getLocalizedMessage());
+
+                sendPhoneCallEvents(params);
+                outgoingFromNumber = null;
+                outgoingToNumber = null;
             }
         };
 
@@ -452,6 +542,12 @@ public class FlutterTwilioVoicePlugin implements FlutterPlugin, MethodChannel.Me
         if (activeCall != null) {
             activeCall.disconnect();
             activeCall = null;
+            outgoingFromNumber = null;
+            outgoingToNumber = null;
+
+            final HashMap<String, Object> params = new HashMap<>();
+            params.put("event", CallState.call_ended.name());
+            sendPhoneCallEvents(params);
         }
     }
 
@@ -459,7 +555,10 @@ public class FlutterTwilioVoicePlugin implements FlutterPlugin, MethodChannel.Me
         if (activeCall != null) {
             boolean hold = activeCall.isOnHold();
             activeCall.hold(!hold);
-            eventSink.success(hold ? "Unhold" : "Hold");
+
+            final HashMap<String, Object> params = new HashMap<>();
+            params.put("event", hold ? CallState.unhold.name() : CallState.hold.name());
+            sendPhoneCallEvents(params);
         }
     }
 
@@ -467,11 +566,16 @@ public class FlutterTwilioVoicePlugin implements FlutterPlugin, MethodChannel.Me
         if (activeCall != null) {
             boolean mute = activeCall.isMuted();
             activeCall.mute(!mute);
-            eventSink.success(mute ? "Unmute" : "Mute");
+
+            final HashMap<String, Object> params = new HashMap<>();
+            params.put("event", mute ? CallState.unmute.name() : CallState.mute.name());
+            sendPhoneCallEvents(params);
         }
     }
 
     private void setAudioFocus(boolean setFocus) {
+        // TODO: Figure this out!!!!
+
         if (audioManager != null) {
             if (setFocus) {
                 savedAudioMode = audioManager.getMode();
@@ -532,6 +636,41 @@ public class FlutterTwilioVoicePlugin implements FlutterPlugin, MethodChannel.Me
               MIC_PERMISSION_REQUEST_CODE);
         }
     }
+
+    private void sendPhoneCallEvents(HashMap<String, Object> params) {
+        if (eventSink == null)
+            return;
+
+        eventSink.success(params);
+    }
+
+    private HashMap<String, Object> callToParams (Call call) {
+
+        final HashMap<String, Object> params = new HashMap<>();
+
+        String from = "";
+        String to = "";
+
+        if (call.getFrom() != null)
+            from = call.getFrom();
+        else if (callOutgoing)
+            from = outgoingFromNumber;
+
+        if (call.getTo() != null)
+            to = call.getTo();
+        else if (callOutgoing)
+            to = outgoingToNumber;
+
+        if (from != null)
+            params.put("from", from);
+        if (to != null)
+            params.put("to", to);
+
+        params.put("direction", (callOutgoing ? CallDirection.outgoing.name() : CallDirection.incoming.name()));
+
+        return params;
+    }
+
 /*
 
     @Override
