@@ -14,6 +14,8 @@ class FlutterTwilioVoice {
   static final String ACTION_CANCEL_CALL = "ACTION_CANCEL_CALL";
   static final String ACTION_FCM_TOKEN = "ACTION_FCM_TOKEN";
 
+  static final String ANDROID_MESSAGE_INTENT_STRING = "com.flutter.twilio.message.notificaiton";
+
   final MethodChannel _channel = const MethodChannel('flutter_twilio_voice/messages');
 
   final EventChannel _eventChannel = EventChannel('flutter_twilio_voice/events');
@@ -58,7 +60,7 @@ class FlutterTwilioVoice {
     return _channel.invokeMethod('makeCall', options);
   }
 
-    Future<bool> processIncomingVoipMessage(
+    Future<bool> processIncomingInviteMessage(
       {@required dynamic message}) {
     return _channel.invokeMethod('incomingVoipMessage',  <String, dynamic>{"message": message});
   }

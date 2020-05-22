@@ -1,9 +1,12 @@
 package com.dormmom.flutter_twilio_voice;
 import com.dormmom.flutter_twilio_voice.fcm.VoiceFirebaseMessagingService;
+import com.google.firebase.messaging.FirebaseMessagingService;
 import com.twilio.voice.Call;
 import com.twilio.voice.CallException;
 import com.twilio.voice.CallInvite;
+import com.twilio.voice.CancelledCallInvite;
 import com.twilio.voice.ConnectOptions;
+import com.twilio.voice.MessageListener;
 import com.twilio.voice.RegistrationException;
 import com.twilio.voice.RegistrationListener;
 import com.twilio.voice.UnregistrationListener;
@@ -25,6 +28,7 @@ import android.media.AudioManager;
 import android.os.Build;
 import android.util.Log;
 import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
 import androidx.core.app.ActivityCompat;
 import androidx.core.content.ContextCompat;
 import androidx.localbroadcastmanager.content.LocalBroadcastManager;
@@ -131,72 +135,83 @@ public class FlutterTwilioVoicePlugin implements FlutterPlugin, MethodChannel.Me
     }
 
     private void handleIncomingCallIntent(Intent intent) {
-        if (intent != null && intent.getAction() != null) {
-            String action = intent.getAction();
-            Log.d(TAG, "Handling incoming call intent for action " + action);
-            activeCallInvite = intent.getParcelableExtra(Constants.INCOMING_CALL_INVITE);
-            activeCallNotificationId = intent.getIntExtra(Constants.INCOMING_CALL_NOTIFICATION_ID, 0);
-            callOutgoing = false;
-
-            switch (action) {
-            case Constants.ACTION_INCOMING_CALL:
-                handleIncomingCall(activeCallInvite.getFrom(), activeCallInvite.getTo());
-                break;
-            case Constants.ACTION_INCOMING_CALL_NOTIFICATION:
-                handleIncomingCall(activeCallInvite.getFrom(), activeCallInvite.getTo());
-                break;
-            case Constants.ACTION_CANCEL_CALL:
-                handleCancel();
-                break;
-            case Constants.ACTION_FCM_TOKEN:
-                //retrieveAccessToken();
-                break;
-            case Constants.ACTION_ACCEPT:
-                answer();
-                break;
-            default:
-                break;
-            }
-        }
+       if (intent != null && intent.getAction() != null) {
+           String action = intent.getAction();
+           Log.d(TAG, "==============>> Handling incoming call intent for action " + action);
+//            activeCallInvite = intent.getParcelableExtra(Constants.INCOMING_CALL_INVITE);
+//            activeCallNotificationId = intent.getIntExtra(Constants.INCOMING_CALL_NOTIFICATION_ID, 0);
+//            callOutgoing = false;
+//
+//            switch (action) {
+//            case Constants.ACTION_INCOMING_CALL:
+//                handleIncomingCall(activeCallInvite.getFrom(), activeCallInvite.getTo());
+//                break;
+//            case Constants.ACTION_INCOMING_CALL_NOTIFICATION:
+//                handleIncomingCall(activeCallInvite.getFrom(), activeCallInvite.getTo());
+//                break;
+//            case Constants.ACTION_CANCEL_CALL:
+//                handleCancel();
+//                break;
+//            case Constants.ACTION_FCM_TOKEN:
+//                //retrieveAccessToken();
+//                break;
+//            case Constants.ACTION_ACCEPT:
+//                answer();
+//                break;
+//            default:
+//                break;
+//            }
+       }
     }
 
     // private void showIncomingCallDialog() {
     //     this.handleIncomingCall(activeCallInvite.getFrom(), activeCallInvite.getTo());
     // }
 
-    private void handleIncomingCall(String from, String to) {
+    private void handleIncomingCall(@NonNull CallInvite callInvite) {
 
         final HashMap<String, Object> params = new HashMap<>();
         params.put("event", CallState.call_invite.name());
-        params.put("from", from);
-        params.put("to", to);
-        params.put("sid", activeCallInvite.getCallSid());
-        params.put("direction",  (callOutgoing ? CallDirection.outgoing.name() : CallDirection.incoming.name()));
+        params.put("from", callInvite.getFrom());
+        params.put("to", callInvite.getTo());
+        params.put("sid", callInvite.getCallSid());
+        params.put("direction", CallDirection.incoming.name());
 
-        Object customParameters = activeCallInvite.getCustomParameters();
+        Object customParameters = callInvite.getCustomParameters();
         if (customParameters != null)
             params.put("customParameters",  customParameters);
 
         sendPhoneCallEvents(params);
 
         SoundPoolManager.getInstance(activity).playRinging();
-        /*if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) {
-            showIncomingCallDialog();
-        } else {
-            if (isAppVisible()) {
-                showIncomingCallDialog();
-            }
-        }*/
+//        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) {
+//            showIncomingCallDialog();
+//        } else {
+//            if (isAppVisible()) {
+//                showIncomingCallDialog();
+//            }
+//        }
     }
 
-    private void handleCancel() {
+//    private void showIncomingCallDialog() {
+//        SoundPoolManager.getInstance(this).playRinging();
+//        if (activeCallInvite != null) {
+//            alertDialog = createIncomingCallDialog(VoiceActivity.this,
+//                    activeCallInvite,
+//                    answerCallClickListener(),
+//                    cancelCallClickListener());
+//            alertDialog.show();
+//        }
+//    }
+//
+    private void handleCancel(@NonNull CancelledCallInvite cancelledCallInvite, @Nullable CallException callException) {
         //if (alertDialog != null && alertDialog.isShowing()) {
 
         final HashMap<String, Object> params = new HashMap<>();
         params.put("event", CallState.call_invite_canceled.name());
-        params.put("from", activeCallInvite.getFrom());
-        params.put("to", activeCallInvite.getTo());
-        params.put("sid", activeCallInvite.getCallSid());
+        params.put("from", cancelledCallInvite.getFrom());
+        params.put("to", cancelledCallInvite.getTo());
+        params.put("sid", cancelledCallInvite.getCallSid());
         params.put("direction",  CallDirection.incoming.name());
 
         sendPhoneCallEvents(params);
@@ -210,6 +225,7 @@ public class FlutterTwilioVoicePlugin implements FlutterPlugin, MethodChannel.Me
     private void registerReceiver() {
         if (!isReceiverRegistered) {
             IntentFilter intentFilter = new IntentFilter();
+            intentFilter.addAction(Constants.ACTION_FIREBASE_MESSAGE);
             intentFilter.addAction(Constants.ACTION_INCOMING_CALL);
             intentFilter.addAction(Constants.ACTION_INCOMING_CALL_NOTIFICATION);
             intentFilter.addAction(Constants.ACTION_CANCEL_CALL);
@@ -306,6 +322,45 @@ public class FlutterTwilioVoicePlugin implements FlutterPlugin, MethodChannel.Me
         }
     }
 
+    /* Handle callbacks for Call Invites
+     */
+
+    public boolean handleInviteMessage(HashMap<String, Object> message) {
+        Log.d(TAG, "Received callInvite message");
+        Log.d(TAG, "Bundle data: " + message);
+        Map<String, String> data = (Map<String, String>)message.get("data");
+
+        if (isTwilioMessage(data) == false)
+            return false;
+
+        // Check if message contains a data payload.
+            boolean valid = Voice.handleMessage(this.context, data, new MessageListener() {
+                @Override
+                public void onCallInvite(@NonNull CallInvite callInvite) {
+                    final int notificationId = (int) System.currentTimeMillis();
+                    activeCallInvite = callInvite;
+                    handleIncomingCall(callInvite);
+                }
+                @Override
+                public void onCancelledCallInvite(@NonNull CancelledCallInvite cancelledCallInvite, @Nullable CallException callException) {
+                    handleCancel(cancelledCallInvite, callException);
+                    activeCallInvite = null;
+                }
+            });
+            return true;
+    }
+
+    private boolean isTwilioMessage(Map<String, String> data) {
+        // Verify this a twilio voice call.
+        if (data == null)
+            return false;
+
+        String twiMsgType = data.get("twi_message_type");
+        boolean result =  (twiMsgType != null && twiMsgType.equals("twilio.voice.call"));
+        return result;
+
+    }
+
     @Override
     public void onDetachedFromEngine(FlutterPluginBinding flutterPluginBinding) {
         Log.d(TAG, "Detatched from Flutter engine");
@@ -390,11 +445,10 @@ public class FlutterTwilioVoicePlugin implements FlutterPlugin, MethodChannel.Me
 
         } else if (call.method.equals("incomingVoipMessage")) {
             Log.d(TAG, "incomingVoipMessage");
-            final HashMap<String, String> params = new HashMap<>();
-            final RemoteMessage message = call.argument("message");
 
-            vms.onMessageReceived(message);
-            result.success(true);
+            final HashMap<String, Object> message = call.argument("message");
+            result.success(handleInviteMessage(message));
+
         } else {
             result.notImplemented();
         }

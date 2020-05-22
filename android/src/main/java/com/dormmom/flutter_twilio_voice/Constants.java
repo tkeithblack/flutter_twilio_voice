@@ -14,4 +14,6 @@ public class Constants {
     public static final String ACTION_INCOMING_CALL = "ACTION_INCOMING_CALL";
     public static final String ACTION_CANCEL_CALL = "ACTION_CANCEL_CALL";
     public static final String ACTION_FCM_TOKEN = "ACTION_FCM_TOKEN";
+    public static final String ACTION_FIREBASE_MESSAGE = "io.flutter.plugins.firebasemessaging.NOTIFICATION";
+
 }
