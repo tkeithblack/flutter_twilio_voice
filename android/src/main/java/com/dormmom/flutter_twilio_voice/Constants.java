@@ -7,6 +7,7 @@ public class Constants {
     public static final String VOICE_CHANNEL_HIGH_IMPORTANCE = "notification-channel-high-importance";
     public static final String INCOMING_CALL_INVITE = "INCOMING_CALL_INVITE";
     public static final String CANCELLED_CALL_INVITE = "CANCELLED_CALL_INVITE";
+    public static final String CANCELLED_CALL_INVITE_ERROR = "CANCELLED_CALL_INVITE_ERROR";
     public static final String INCOMING_CALL_NOTIFICATION_ID = "INCOMING_CALL_NOTIFICATION_ID";
     public static final String ACTION_ACCEPT = "ACTION_ACCEPT";
     public static final String ACTION_REJECT = "ACTION_REJECT";
@@ -15,5 +16,5 @@ public class Constants {
     public static final String ACTION_CANCEL_CALL = "ACTION_CANCEL_CALL";
     public static final String ACTION_FCM_TOKEN = "ACTION_FCM_TOKEN";
     public static final String ACTION_FIREBASE_MESSAGE = "io.flutter.plugins.firebasemessaging.NOTIFICATION";
-
+    public static final String EXTRA_REMOTE_MESSAGE = "notification";
 }

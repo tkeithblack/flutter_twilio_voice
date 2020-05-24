@@ -60,11 +60,6 @@ class FlutterTwilioVoice {
     return _channel.invokeMethod('makeCall', options);
   }
 
-    Future<bool> processIncomingInviteMessage(
-      {@required dynamic message}) {
-    return _channel.invokeMethod('incomingVoipMessage',  <String, dynamic>{"message": message});
-  }
-
   Future<bool> hangUp() {
     return _channel.invokeMethod('hangUp', <String, dynamic>{});
   }

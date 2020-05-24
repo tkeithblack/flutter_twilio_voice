@@ -1,10 +1,12 @@
 package com.dormmom.flutter_twilio_voice.fcm;
 
+import android.app.Service;
 import android.content.Intent;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.localbroadcastmanager.content.LocalBroadcastManager;
 
+import android.os.IBinder;
 import android.util.Log;
 
 import com.google.firebase.messaging.FirebaseMessagingService;
@@ -19,14 +21,23 @@ import com.dormmom.flutter_twilio_voice.Constants;
 import com.dormmom.flutter_twilio_voice.IncomingCallNotificationService;
 
 public class VoiceFirebaseMessagingService extends FirebaseMessagingService {
+//    public class VoiceFirebaseMessagingService extends Service {
 
     private static final String TAG = "VoiceFCMService";
 
     @Override
     public void onCreate() {
+
         super.onCreate();
     }
 
+
+//    @Nullable
+//    @Override
+//    public IBinder onBind(Intent intent) {
+//        return null;
+//    }
+//
     /**
      * Called when message is received.
      *
@@ -49,7 +60,7 @@ public class VoiceFirebaseMessagingService extends FirebaseMessagingService {
 
                 @Override
                 public void onCancelledCallInvite(@NonNull CancelledCallInvite cancelledCallInvite, @Nullable CallException callException) {
-                    handleCanceledCallInvite(cancelledCallInvite);
+                    handleCanceledCallInvite(cancelledCallInvite, callException);
                 }
             });
 
@@ -60,14 +71,16 @@ public class VoiceFirebaseMessagingService extends FirebaseMessagingService {
         }
     }
 
-    @Override
-    public void onNewToken(String token) {
-        super.onNewToken(token);
-        Intent intent = new Intent(Constants.ACTION_FCM_TOKEN);
-        LocalBroadcastManager.getInstance(this).sendBroadcast(intent);
-    }
-
+//    @Override
+//    public void onNewToken(String token) {
+//        super.onNewToken(token);
+//        Intent intent = new Intent(Constants.ACTION_FCM_TOKEN);
+//        LocalBroadcastManager.getInstance(this).sendBroadcast(intent);
+//    }
+//
     private void handleInvite(CallInvite callInvite, int notificationId) {
+        Log.d(TAG, "Inside handleInvite(CallInvite callInvite, int notificationId) {\n");
+
         Intent intent = new Intent(this, IncomingCallNotificationService.class);
         intent.setAction(Constants.ACTION_INCOMING_CALL);
         intent.putExtra(Constants.INCOMING_CALL_NOTIFICATION_ID, notificationId);
@@ -76,10 +89,12 @@ public class VoiceFirebaseMessagingService extends FirebaseMessagingService {
         startService(intent);
     }
 
-    private void handleCanceledCallInvite(CancelledCallInvite cancelledCallInvite) {
+    private void handleCanceledCallInvite(CancelledCallInvite cancelledCallInvite, @Nullable CallException callException) {
         Intent intent = new Intent(this, IncomingCallNotificationService.class);
         intent.setAction(Constants.ACTION_CANCEL_CALL);
         intent.putExtra(Constants.CANCELLED_CALL_INVITE, cancelledCallInvite);
+        if (callException != null)
+            intent.putExtra(Constants.CANCELLED_CALL_INVITE_ERROR, callException);
 
         startService(intent);
     }

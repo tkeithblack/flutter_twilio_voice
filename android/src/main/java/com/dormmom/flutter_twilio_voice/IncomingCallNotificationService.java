@@ -27,6 +27,7 @@ public class IncomingCallNotificationService extends Service {
 
     @Override
     public int onStartCommand(Intent intent, int flags, int startId) {
+        Log.d(TAG, "inside OnStartCommand()");
         String action = intent.getAction();
 
         if (action != null) {
@@ -58,6 +59,8 @@ public class IncomingCallNotificationService extends Service {
     }
 
     private Notification createNotification(CallInvite callInvite, int notificationId, int channelImportance) {
+        Log.d(TAG, "Inside createNotification(");
+
         Intent intent = new Intent();
         intent.setAction(Constants.ACTION_INCOMING_CALL_NOTIFICATION);
         intent.putExtra(Constants.INCOMING_CALL_NOTIFICATION_ID, notificationId);
@@ -156,7 +159,10 @@ public class IncomingCallNotificationService extends Service {
     private void accept(CallInvite callInvite, int notificationId) {
         endForeground();
         Intent activeCallIntent = new Intent();
+        Intent intent = new Intent(this, FlutterTwilioVoicePlugin.class);
         activeCallIntent.putExtra(Constants.INCOMING_CALL_INVITE, callInvite);
+        activeCallIntent.addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP);
+        activeCallIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
         activeCallIntent.putExtra(Constants.INCOMING_CALL_NOTIFICATION_ID, notificationId);
         activeCallIntent.setAction(Constants.ACTION_ACCEPT);
         LocalBroadcastManager.getInstance(this).sendBroadcast(activeCallIntent);
@@ -199,14 +205,21 @@ public class IncomingCallNotificationService extends Service {
      * Send the CallInvite to the VoiceActivity. Start the activity if it is not running already.
      */
     private void sendCallInviteToActivity(CallInvite callInvite, int notificationId) {
+        Log.d(TAG, "inside sendCallInviteToActivity(CallInvite callInvite, int notificationId)");
         if (Build.VERSION.SDK_INT >= 29 && !isAppVisible()) {
             return;
         }
+//        Intent intent = new Intent();
+        Log.d(TAG, "Continuing sendCallInviteToActivity(CallInvite callInvite, int notificationId)");
+
         Intent intent = new Intent();
+//        Intent intent = new Intent(this, FlutterTwilioVoicePlugin.class);
         intent.setAction(Constants.ACTION_INCOMING_CALL);
         intent.putExtra(Constants.INCOMING_CALL_NOTIFICATION_ID, notificationId);
         intent.putExtra(Constants.INCOMING_CALL_INVITE, callInvite);
-        LocalBroadcastManager.getInstance(this).sendBroadcast(intent);
+        intent.addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP);
+        intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+        this.startActivity(intent);
     }
 
     private boolean isAppVisible() {
