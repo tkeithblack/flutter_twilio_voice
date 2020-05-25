@@ -18,8 +18,35 @@ import com.twilio.voice.Voice;
 import com.dormmom.flutter_twilio_voice.Constants;
 import com.dormmom.flutter_twilio_voice.IncomingCallNotificationService;
 
+// This class processes messages that originally come through FCM. However, these messages
+// arrive here after the message is caught by FlutterTwilioVoicePlugin.onReceive() which in
+// response launches this service.
+//
+// FlutterTwilioVoicePlugin.onReceive() receives the FCM message via a broadcast from the
+// FlutterMessaging plugin. In order to receive this broadcast
+// the flutter app using this FlutterTwilioVoice plugin must register for FCM
+// broadcasts by calling:
+//
+//   firebaseMessaging.registerAndroidMessageIntentListener("com.flutter.android.twilio.callinvite_message")
+//
+// This call request that the FirebaseMessaging plugin send a LocalBroadcast of the Intent
+// along with the push message payload each time it receives an FCM push message.
+//
+// For this service to launch the main app's AndroidManifest.xml file must include.
+//
+//         <service
+//            android:name="com.dormmom.flutter_twilio_voice.fcm.VoiceFirebaseMessagingService"
+//            android:stopWithTask="false">
+//            <intent-filter>
+//                <action android:name="com.flutter.android.twilio.callinvite_message" />
+//            </intent-filter>
+//        </service>
+//
+// This implementation differs from the prescribed approach of extending FirebaseMessagingService
+// because when this plugin implements FirebaseMessagingService it conflicts with
+// the popular FirebaseMessaging plugin and hence both can't receive FCM push notifications.
+//
 public class VoiceFirebaseMessagingService extends Service {
-//    public class VoiceFirebaseMessagingService extends Service {
 
     private static final String TAG = "VoiceFCMService";
 
@@ -84,13 +111,6 @@ public class VoiceFirebaseMessagingService extends Service {
         }
     }
 
-    //    @Override
-//    public void onNewToken(String token) {
-//        super.onNewToken(token);
-//        Intent intent = new Intent(Constants.ACTION_FCM_TOKEN);
-//        LocalBroadcastManager.getInstance(this).sendBroadcast(intent);
-//    }
-//
     private void handleInvite(CallInvite callInvite, int notificationId) {
         Log.d(TAG, "Inside handleInvite(CallInvite callInvite, int notificationId) {\n");
 
