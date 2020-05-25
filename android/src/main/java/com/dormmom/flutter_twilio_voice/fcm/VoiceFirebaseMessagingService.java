@@ -4,12 +4,10 @@ import android.app.Service;
 import android.content.Intent;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
-import androidx.localbroadcastmanager.content.LocalBroadcastManager;
 
 import android.os.IBinder;
 import android.util.Log;
 
-import com.google.firebase.messaging.FirebaseMessagingService;
 import com.google.firebase.messaging.RemoteMessage;
 import com.twilio.voice.CallException;
 import com.twilio.voice.CallInvite;
@@ -20,31 +18,46 @@ import com.twilio.voice.Voice;
 import com.dormmom.flutter_twilio_voice.Constants;
 import com.dormmom.flutter_twilio_voice.IncomingCallNotificationService;
 
-public class VoiceFirebaseMessagingService extends FirebaseMessagingService {
+public class VoiceFirebaseMessagingService extends Service {
 //    public class VoiceFirebaseMessagingService extends Service {
 
     private static final String TAG = "VoiceFCMService";
 
     @Override
     public void onCreate() {
-
+        Log.d(TAG, "VoiceFirebaseMessagingService.onCreate");
         super.onCreate();
     }
 
+    @Nullable
+    @Override
+    public IBinder onBind(Intent intent) {
+        Log.d(TAG, "VoiceFirebaseMessagingService.onBind");
+        return null;
+    }
 
-//    @Nullable
-//    @Override
-//    public IBinder onBind(Intent intent) {
-//        return null;
-//    }
-//
+    @Override
+    public int onStartCommand(Intent intent, int flags, int startId) {
+        Log.d(TAG, "VoiceFirebaseMessagingService.onStartCommand");
+        RemoteMessage remoteMessage = intent.getParcelableExtra(Constants.EXTRA_CALLINVITE_MESSAGE);
+
+        if (remoteMessage != null)
+            processMessageReceived(remoteMessage);
+
+        return START_NOT_STICKY;
+    }
+
     /**
      * Called when message is received.
      *
      * @param remoteMessage Object representing the message received from Firebase Cloud Messaging.
      */
-    @Override
-    public void onMessageReceived(RemoteMessage remoteMessage) {
+//    @Override
+//    public void onMessageReceived(RemoteMessage remoteMessage) {
+//        processMessageReceived(remoteMessage);
+//    }
+
+    public void processMessageReceived(RemoteMessage remoteMessage) {
         Log.d(TAG, "Received onMessageReceived()");
         Log.d(TAG, "Bundle data: " + remoteMessage.getData());
         Log.d(TAG, "From: " + remoteMessage.getFrom());
@@ -66,12 +79,12 @@ public class VoiceFirebaseMessagingService extends FirebaseMessagingService {
 
             if (!valid) {
                 Log.e(TAG, "The message was not a valid Twilio Voice SDK payload: " +
-                  remoteMessage.getData());
+                        remoteMessage.getData());
             }
         }
     }
 
-//    @Override
+    //    @Override
 //    public void onNewToken(String token) {
 //        super.onNewToken(token);
 //        Intent intent = new Intent(Constants.ACTION_FCM_TOKEN);

@@ -1,12 +1,10 @@
 package com.dormmom.flutter_twilio_voice;
 import com.dormmom.flutter_twilio_voice.fcm.VoiceFirebaseMessagingService;
-import com.google.firebase.messaging.FirebaseMessagingService;
 import com.twilio.voice.Call;
 import com.twilio.voice.CallException;
 import com.twilio.voice.CallInvite;
 import com.twilio.voice.CancelledCallInvite;
 import com.twilio.voice.ConnectOptions;
-import com.twilio.voice.MessageListener;
 import com.twilio.voice.RegistrationException;
 import com.twilio.voice.RegistrationListener;
 import com.twilio.voice.UnregistrationListener;
@@ -256,7 +254,7 @@ public class FlutterTwilioVoicePlugin implements FlutterPlugin, MethodChannel.Me
     private void registerReceiver() {
         if (!isReceiverRegistered) {
             IntentFilter intentFilter = new IntentFilter();
-            intentFilter.addAction(Constants.ACTION_FIREBASE_MESSAGE);
+            intentFilter.addAction(Constants.ACTION_CALLINVITE);
             intentFilter.addAction(Constants.ACTION_INCOMING_CALL);
             intentFilter.addAction(Constants.ACTION_INCOMING_CALL_NOTIFICATION);
             intentFilter.addAction(Constants.ACTION_CANCEL_CALL);
@@ -317,14 +315,19 @@ public class FlutterTwilioVoicePlugin implements FlutterPlugin, MethodChannel.Me
             String action = intent.getAction();
             Log.d(TAG, "Received broadcast for action " + action);
 
-//            // This message was grabbed from the firebase_messaging plugin broadcast.
-//            if (action != null && action.equals(Constants.ACTION_FIREBASE_MESSAGE)) {
-//
-//                RemoteMessage remoteMessage = intent.getParcelableExtra(Constants.EXTRA_REMOTE_MESSAGE);
-//                Log.i(TAG, "remoteMessage: " + remoteMessage);
-//                vms.processMessageReceived(remoteMessage);
-//            }
-//
+            // This message was grabbed from the firebase_messaging plugin broadcast.
+            if (action != null && action.equals(Constants.ACTION_CALLINVITE)) {
+                RemoteMessage remoteMessage = intent.getParcelableExtra(Constants.EXTRA_CALLINVITE_MESSAGE);
+
+                Log.d(TAG, "handling FirebaseNotificaiton message.");
+
+                Intent vmsIntent = new Intent(context , VoiceFirebaseMessagingService.class);
+                vmsIntent.setAction(action);
+
+                vmsIntent.putExtra(Constants.EXTRA_CALLINVITE_MESSAGE, remoteMessage);
+                context.startService(vmsIntent);
+            }
+
             if (action != null && (action.equals(Constants.ACTION_INCOMING_CALL) || action.equals(Constants.ACTION_CANCEL_CALL))) {
                 /*
                  * Handle the incoming or cancelled call invite
@@ -334,6 +337,10 @@ public class FlutterTwilioVoicePlugin implements FlutterPlugin, MethodChannel.Me
                 plugin.handleIncomingCallIntent(intent);
             }
         }
+    }
+
+    private void startVoiceFirebaseMessaingService() {
+
     }
 
     /*

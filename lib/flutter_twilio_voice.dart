@@ -14,7 +14,7 @@ class FlutterTwilioVoice {
   static final String ACTION_CANCEL_CALL = "ACTION_CANCEL_CALL";
   static final String ACTION_FCM_TOKEN = "ACTION_FCM_TOKEN";
 
-  static final String ANDROID_MESSAGE_INTENT_STRING = "com.flutter.twilio.message.notificaiton";
+  static final String ANDROID_CALLINVITE_INTENT_ACTION = "com.flutter.android.twilio.callinvite_message";
 
   final MethodChannel _channel = const MethodChannel('flutter_twilio_voice/messages');
 
