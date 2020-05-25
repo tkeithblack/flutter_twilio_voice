@@ -63,7 +63,7 @@ FlutterTwilioVoice.phoneCallEventSubscription.listen((data)
 
 Receiving incoming calls for Andorid requires special handling because 
 incoming calls are triggered by FCM push notifications as Call Invites. Of course,
-other parts of the apps also need access to push notifications, for example messaging.
+other features in apps also need access to push notifications, for example messaging.
 In the Flutter world (at this time) most apps that need push notifiations are using a
 plugin called FirebaseMessaging (firebase_messaging). FirebaseMessaging listens to 
 FCM push notifications which conlficts with FlutterTwilioVoice attempting to 
@@ -73,7 +73,7 @@ My solution at this point, in my opinion, is very undesirable, but does accompli
 getting the messages into FlutterTwilioVoicePlugin.
 
 I have created a Fork of FirebaseMessaging which allows requesting a
-LocalBroadcast off all push notifications via an Intent (on Android). These are then
+LocalBroadcast of all push notifications via an Intent (on Android). These are then
 picked up by the FlutterTwilioVoice plugin and incoming calls are processed.
 
 (BTW, if anyone knows of a way both plugins can capture these push messages please
@@ -124,11 +124,5 @@ It is also necessary to add the following items to your Flutter app's AndroidMan
 
     </application>
 ```
-
-## To Do
-
-1. Android Support
-2. Propagate Events and Call Status Notifications to Flutter
-
 
 
