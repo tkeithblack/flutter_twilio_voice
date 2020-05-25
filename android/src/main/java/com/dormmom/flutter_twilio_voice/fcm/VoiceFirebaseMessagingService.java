@@ -126,8 +126,9 @@ public class VoiceFirebaseMessagingService extends Service {
         Intent intent = new Intent(this, IncomingCallNotificationService.class);
         intent.setAction(Constants.ACTION_CANCEL_CALL);
         intent.putExtra(Constants.CANCELLED_CALL_INVITE, cancelledCallInvite);
-        if (callException != null)
-            intent.putExtra(Constants.CANCELLED_CALL_INVITE_ERROR, callException);
+
+        if (callException != null && callException.getErrorCode() != CallException.EXCEPTION_CALL_CANCELLED)
+            intent.putExtra(Constants.CANCELLED_CALL_INVITE_ERROR, callException.getLocalizedMessage());
 
         startService(intent);
     }

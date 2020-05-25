@@ -150,16 +150,15 @@ public class FlutterTwilioVoicePlugin implements FlutterPlugin, MethodChannel.Me
                 handleIncomingCall(activeCallInvite);
                 break;
             case Constants.ACTION_INCOMING_CALL_NOTIFICATION:
-//                showIncomingCallDialog();
                 break;
             case Constants.ACTION_CANCEL_CALL:
                 CancelledCallInvite cancelledCallInvite = intent.getParcelableExtra(Constants.CANCELLED_CALL_INVITE);
-                CallException callException = intent.getParcelableExtra(Constants.CANCELLED_CALL_INVITE_ERROR);
-                handleCancel(cancelledCallInvite, callException);
+
+                String callError = null;
+                if (intent.hasExtra(Constants.CANCELLED_CALL_INVITE_ERROR))
+                    callError = intent.getStringExtra(Constants.CANCELLED_CALL_INVITE_ERROR);
+                handleCancel(cancelledCallInvite, callError);
                 break;
-//            case Constants.ACTION_FCM_TOKEN:
-//               // retrieveAccessToken();
-//                break;
             case Constants.ACTION_ACCEPT:
                 answer();
                 break;
@@ -233,7 +232,7 @@ public class FlutterTwilioVoicePlugin implements FlutterPlugin, MethodChannel.Me
         keyguardLock.disableKeyguard();
     }
 
-    private void handleCancel(@NonNull CancelledCallInvite cancelledCallInvite, @Nullable CallException callException) {
+    private void handleCancel(@NonNull CancelledCallInvite cancelledCallInvite, @Nullable String callErrorDescription) {
         //if (alertDialog != null && alertDialog.isShowing()) {
 
         final HashMap<String, Object> params = new HashMap<>();
@@ -242,13 +241,13 @@ public class FlutterTwilioVoicePlugin implements FlutterPlugin, MethodChannel.Me
         params.put("to", cancelledCallInvite.getTo());
         params.put("sid", cancelledCallInvite.getCallSid());
         params.put("direction",  CallDirection.incoming.name());
+        if (callErrorDescription != null)
+            params.put("error",  callErrorDescription);
 
         sendPhoneCallEvents(params);
 
         callOutgoing = false;
         SoundPoolManager.getInstance(activity).stopRinging();
-            //alertDialog.cancel();
-        //}
     }
 
     private void registerReceiver() {
@@ -326,6 +325,7 @@ public class FlutterTwilioVoicePlugin implements FlutterPlugin, MethodChannel.Me
 
                 vmsIntent.putExtra(Constants.EXTRA_CALLINVITE_MESSAGE, remoteMessage);
                 context.startService(vmsIntent);
+                return;
             }
 
             if (action != null && (action.equals(Constants.ACTION_INCOMING_CALL) || action.equals(Constants.ACTION_CANCEL_CALL))) {

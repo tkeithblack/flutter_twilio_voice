@@ -163,7 +163,7 @@ class FlutterTwilioVoice {
       case "call_invite_canceled":
         _setCallInfoFromParams(params: params);
         callStartedOn = DateTime.now().millisecondsSinceEpoch;
-        callInviteCancel(customParameters: params["customParameters"]); 
+        callInviteCancel(errorMessage: params["error"]); 
         return CallState.call_invite_canceled;
       case "ringing":
         _setCallInfoFromParams(params: params);
@@ -268,7 +268,7 @@ class FlutterTwilioVoice {
 
   // Notification methods that can be overridden
   void callInvite({ Map<dynamic, dynamic> customParameters }) {}
-  void callInviteCancel({ Map<dynamic, dynamic> customParameters }) {}
+  void callInviteCancel({ String errorMessage }) {}
   void callDidStartRinging() {}
   void callDidConnect() {}
   void callReconnected() {}
