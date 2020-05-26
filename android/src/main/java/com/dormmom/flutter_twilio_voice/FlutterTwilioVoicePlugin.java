@@ -190,27 +190,8 @@ public class FlutterTwilioVoicePlugin implements FlutterPlugin, MethodChannel.Me
 
         sendPhoneCallEvents(params);
 
-        SoundPoolManager.getInstance(activity).playRinging();
-//        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) {
-//            showIncomingCallDialog();
-//        } else {
-//            if (isAppVisible()) {
-//                showIncomingCallDialog();
-//            }
-//        }
+        SoundPoolManager.getInstance(context).playRinging();
     }
-
-//    private void showIncomingCallDialog() {
-//        SoundPoolManager.getInstance(this).playRinging();
-//        if (activeCallInvite != null) {
-//            alertDialog = createIncomingCallDialog(VoiceActivity.this,
-//                    activeCallInvite,
-//                    answerCallClickListener(),
-//                    cancelCallClickListener());
-//            alertDialog.show();
-//        }
-//    }
-//
 
     private void showWhenInBackground() {
         // These flags ensure that the activity can be launched when the screen is locked.
@@ -247,7 +228,9 @@ public class FlutterTwilioVoicePlugin implements FlutterPlugin, MethodChannel.Me
         sendPhoneCallEvents(params);
 
         callOutgoing = false;
-        SoundPoolManager.getInstance(activity).stopRinging();
+        SoundPoolManager.getInstance(context).stopRinging();
+
+        activeCallInvite = null;
     }
 
     private void registerReceiver() {
@@ -339,10 +322,6 @@ public class FlutterTwilioVoicePlugin implements FlutterPlugin, MethodChannel.Me
         }
     }
 
-    private void startVoiceFirebaseMessaingService() {
-
-    }
-
     /*
      * Register your FCM token with Twilio to receive incoming call invites
      *
@@ -369,34 +348,6 @@ public class FlutterTwilioVoicePlugin implements FlutterPlugin, MethodChannel.Me
             this.fcmToken = null;
         }
     }
-
-    /* Handle callbacks for Call Invites
-     */
-
-//    public boolean handleInviteMessage(HashMap<String, Object> message) {
-//        Log.d(TAG, "Received callInvite message");
-//        Log.d(TAG, "Bundle data: " + message);
-//        Map<String, String> data = (Map<String, String>)message.get("data");
-//
-//        if (isTwilioMessage(data) == false)
-//            return false;
-//
-//        // Check if message contains a data payload.
-//            boolean valid = Voice.handleMessage(this.context, data, new MessageListener() {
-//                @Override
-//                public void onCallInvite(@NonNull CallInvite callInvite) {
-//                    final int notificationId = (int) System.currentTimeMillis();
-//                    activeCallInvite = callInvite;
-//                    handleIncomingCall(callInvite);
-//                }
-//                @Override
-//                public void onCancelledCallInvite(@NonNull CancelledCallInvite cancelledCallInvite, @Nullable CallException callException) {
-//                    handleCancel(cancelledCallInvite, callException);
-//                    activeCallInvite = null;
-//                }
-//            });
-//            return true;
-//    }
 
     private boolean isTwilioMessage(Map<String, String> data) {
         // Verify this a twilio voice call.
@@ -464,6 +415,10 @@ public class FlutterTwilioVoicePlugin implements FlutterPlugin, MethodChannel.Me
             Log.d(TAG, "Answering call");
             this.answer();
             result.success(true);
+        } else if (call.method.equals("reject")) {
+            Log.d(TAG, "Rejecting call");
+            this.reject();
+            result.success(true);
         } else if (call.method.equals("unregister")) {
             this.unregisterForCallInvites();
             result.success(true);
@@ -507,9 +462,21 @@ public class FlutterTwilioVoicePlugin implements FlutterPlugin, MethodChannel.Me
      */
     private void answer() {
         Log.d(TAG, "Answering call");
-        SoundPoolManager.getInstance(this.context).stopRinging();
+        SoundPoolManager.getInstance(context).stopRinging();
         activeCallInvite.accept(this.activity, callListener);
         notificationManager.cancel(activeCallNotificationId);
+        activeCallInvite = null;
+    }
+
+    private void reject() {
+        SoundPoolManager.getInstance(context).stopRinging();
+        if (activeCallInvite != null) {
+            activeCallInvite.reject(this.activity);
+            activeCall = null;
+            outgoingFromNumber = null;
+            outgoingToNumber = null;
+            activeCallInvite = null;
+        }
     }
 
     @Override

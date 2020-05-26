@@ -195,6 +195,9 @@ public class SwiftFlutterTwilioVoicePlugin: NSObject, FlutterPlugin,  FlutterStr
     else if flutterCall.method == "answer" {
         // nuthin
     }
+    else if flutterCall.method == "reject" {
+        // handled by CallKit.
+    }
     else if flutterCall.method == "unregister" {
         self.unregister()
     }

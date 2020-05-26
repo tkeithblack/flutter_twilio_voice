@@ -4,6 +4,7 @@ import android.content.Context;
 import android.media.AudioManager;
 import android.media.SoundPool;
 import android.os.Build;
+import android.util.Log;
 
 import static android.content.Context.AUDIO_SERVICE;
 
@@ -61,6 +62,7 @@ public class SoundPoolManager {
     public void playRinging() {
         if (loaded && !playing) {
             ringingStreamId = soundPool.play(ringingSoundId, volume, volume, 1, -1, 1f);
+            Log.d("TwilioSoundPoolManager", "playing ringingSoundId: " + ringingSoundId + ", ringingStreamId = " + ringingStreamId);
             playing = true;
         } else {
             playingCalled = true;

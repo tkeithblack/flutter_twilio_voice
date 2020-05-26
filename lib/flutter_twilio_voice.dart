@@ -68,6 +68,10 @@ class FlutterTwilioVoice {
     return _channel.invokeMethod('answer', <String, dynamic>{});
   }
 
+  Future<bool> reject() {
+    return _channel.invokeMethod('reject', <String, dynamic>{});
+  }
+
   Future<bool> holdCall() {
     return _channel.invokeMethod('holdCall', <String, dynamic>{});
   }
