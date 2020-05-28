@@ -301,7 +301,7 @@ public class FlutterTwilioVoicePlugin implements FlutterPlugin, MethodChannel.Me
             if (action != null && action.equals(Constants.ACTION_CALLINVITE)) {
                 RemoteMessage remoteMessage = intent.getParcelableExtra(Constants.EXTRA_CALLINVITE_MESSAGE);
 
-                Log.d(TAG, "handling FirebaseNotificaiton message.");
+                Log.d(TAG, "handling FirebaseNotificaiton message. RemoteMessage: " + remoteMessage);
 
                 Intent vmsIntent = new Intent(context , VoiceFirebaseMessagingService.class);
                 vmsIntent.setAction(action);
@@ -347,17 +347,6 @@ public class FlutterTwilioVoicePlugin implements FlutterPlugin, MethodChannel.Me
             this.accessToken = null;
             this.fcmToken = null;
         }
-    }
-
-    private boolean isTwilioMessage(Map<String, String> data) {
-        // Verify this a twilio voice call.
-        if (data == null)
-            return false;
-
-        String twiMsgType = data.get("twi_message_type");
-        boolean result =  (twiMsgType != null && twiMsgType.equals("twilio.voice.call"));
-        return result;
-
     }
 
     @Override

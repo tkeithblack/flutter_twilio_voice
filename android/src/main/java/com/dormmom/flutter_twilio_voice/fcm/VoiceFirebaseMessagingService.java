@@ -18,6 +18,8 @@ import com.twilio.voice.Voice;
 import com.dormmom.flutter_twilio_voice.Constants;
 import com.dormmom.flutter_twilio_voice.IncomingCallNotificationService;
 
+import java.util.Map;
+
 // This class processes messages that originally come through FCM. However, these messages
 // arrive here after the message is caught by FlutterTwilioVoicePlugin.onReceive() which in
 // response launches this service.
@@ -90,8 +92,10 @@ public class VoiceFirebaseMessagingService extends Service {
         Log.d(TAG, "From: " + remoteMessage.getFrom());
 
         // Check if message contains a data payload.
-        if (remoteMessage.getData().size() > 0) {
-            boolean valid = Voice.handleMessage(this, remoteMessage.getData(), new MessageListener() {
+        Map<String, String> data = remoteMessage.getData();
+
+        if (data != null && data.size() > 0 && isTwilioMessage(data)) {
+            boolean valid = Voice.handleMessage(this, data, new MessageListener() {
                 @Override
                 public void onCallInvite(@NonNull CallInvite callInvite) {
                     final int notificationId = (int) System.currentTimeMillis();
@@ -109,6 +113,16 @@ public class VoiceFirebaseMessagingService extends Service {
                         remoteMessage.getData());
             }
         }
+    }
+
+    private boolean isTwilioMessage(Map<String, String> data) {
+        // Verify this a twilio voice call.
+        if (data == null)
+            return false;
+
+        String twiMsgType = data.get("twi_message_type");
+        boolean result =  (twiMsgType != null && twiMsgType.equals("twilio.voice.call"));
+        return result;
     }
 
     private void handleInvite(CallInvite callInvite, int notificationId) {
