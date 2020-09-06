@@ -25,6 +25,7 @@ import android.media.AudioAttributes;
 import android.media.AudioFocusRequest;
 import android.media.AudioManager;
 import android.os.Build;
+import android.os.Bundle;
 import android.os.PowerManager;
 import android.util.Log;
 import android.view.Window;
@@ -95,6 +96,7 @@ public class FlutterTwilioVoicePlugin implements FlutterPlugin, MethodChannel.Me
 
     @Override
     public void onAttachedToEngine(FlutterPluginBinding flutterPluginBinding) {
+        Log.i(TAG, "onAttachedToEngine()");
         register(flutterPluginBinding.getFlutterEngine().getDartExecutor(), this, flutterPluginBinding.getApplicationContext());
     }
 
@@ -273,7 +275,7 @@ public class FlutterTwilioVoicePlugin implements FlutterPlugin, MethodChannel.Me
         return new UnregistrationListener() {
             @Override
             public void onUnregistered(String accessToken, String fcmToken) {
-                Log.d(TAG, "Successfully un-registered FCM " + fcmToken);
+                Log.d(TAG, "Successfully registered FCM " + fcmToken);
             }
 
             @Override
@@ -341,6 +343,7 @@ public class FlutterTwilioVoicePlugin implements FlutterPlugin, MethodChannel.Me
     }
 
     private void unregisterForCallInvites() {
+        Log.i(TAG, "unregisterForCallInvites()");
         if (this.accessToken != null && this.fcmToken != null) {
             Log.i(TAG, "Un-registering with FCM");
             Voice.unregister(this.accessToken, Voice.RegistrationChannel.FCM, this.fcmToken, unregistrationListener);
@@ -351,18 +354,21 @@ public class FlutterTwilioVoicePlugin implements FlutterPlugin, MethodChannel.Me
 
     @Override
     public void onDetachedFromEngine(FlutterPluginBinding flutterPluginBinding) {
+        Log.i(TAG, "onDetachedFromEngine()");
         Log.d(TAG, "Detatched from Flutter engine");
         //soundPoolManager.release();
     }
 
     @Override
     public void onListen(Object o, EventChannel.EventSink eventSink) {
+        Log.i(TAG, "onListen()");
         Log.i(TAG, "Setting event sink");
         this.eventSink = eventSink;
     }
 
     @Override
     public void onCancel(Object o) {
+        Log.i(TAG, "onCancel()");
         Log.i(TAG, "Removing event sink");
         this.eventSink = null;
     }
@@ -470,12 +476,15 @@ public class FlutterTwilioVoicePlugin implements FlutterPlugin, MethodChannel.Me
 
     @Override
     public boolean onNewIntent(Intent intent) {
+        Log.d(TAG, "Inside onNewIntent, Intent: " + intent);
+        activity.setIntent(intent);
         this.handleIncomingCallIntent(intent);
         return false;
     }
 
     @Override
     public void onAttachedToActivity(ActivityPluginBinding activityPluginBinding) {
+        Log.d(TAG, "Inside onAttachedToActivity()");
         this.activity = activityPluginBinding.getActivity();
         activityPluginBinding.addOnNewIntentListener(this);
         registerReceiver();
@@ -489,6 +498,8 @@ public class FlutterTwilioVoicePlugin implements FlutterPlugin, MethodChannel.Me
 
     @Override
     public void onDetachedFromActivityForConfigChanges() {
+        Log.d(TAG, "onDetachedFromActivityForConfigChanges()");
+
         this.activity = null;
         unregisterReceiver();
     }
@@ -502,6 +513,8 @@ public class FlutterTwilioVoicePlugin implements FlutterPlugin, MethodChannel.Me
 
     @Override
     public void onDetachedFromActivity() {
+        Log.d(TAG, "onDetachedFromActivity()");
+
         unregisterReceiver();
         this.activity = null;
     }
