@@ -9,7 +9,10 @@ import com.twilio.voice.RegistrationException;
 import com.twilio.voice.RegistrationListener;
 import com.twilio.voice.UnregistrationListener;
 import com.twilio.voice.Voice;
+import com.twilio.audioswitch.AudioSwitch;
+import com.twilio.audioswitch.AudioDevice;
 
+import java.util.ArrayList;
 import java.util.HashMap;
 
 import android.Manifest;
@@ -25,7 +28,6 @@ import android.media.AudioAttributes;
 import android.media.AudioFocusRequest;
 import android.media.AudioManager;
 import android.os.Build;
-import android.os.Bundle;
 import android.os.PowerManager;
 import android.util.Log;
 import android.view.Window;
@@ -33,6 +35,7 @@ import android.view.WindowManager;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
+import androidx.appcompat.app.AlertDialog;
 import androidx.core.app.ActivityCompat;
 import androidx.core.content.ContextCompat;
 import androidx.localbroadcastmanager.content.LocalBroadcastManager;
@@ -44,13 +47,16 @@ import io.flutter.plugin.common.EventChannel;
 import io.flutter.plugin.common.MethodCall;
 import io.flutter.plugin.common.MethodChannel;
 import io.flutter.plugin.common.PluginRegistry;
+import kotlin.Unit;
+
+import java.util.List;
 import java.util.Map;
 
 import com.google.firebase.messaging.RemoteMessage;
 
 enum CallState {
     ringing, connected, reconnecting, reconnected, connect_failed, call_invite, call_invite_canceled, call_ended,
-    unhold, hold, unmute, mute, speaker_on, speaker_off
+    unhold, hold, unmute, mute, speaker_on, speaker_off, audio_route_change
 }
 
 enum CallDirection {
@@ -63,6 +69,7 @@ public class FlutterTwilioVoicePlugin implements FlutterPlugin, MethodChannel.Me
 
     static VoiceFirebaseMessagingService vms = new VoiceFirebaseMessagingService();
 
+    private AudioSwitch audioSwitch;
     private static final String CHANNEL_NAME = "flutter_twilio_voice";
     private static final String TAG = "TwilioVoicePlugin";
     private static final int MIC_PERMISSION_REQUEST_CODE = 1;
@@ -104,6 +111,7 @@ public class FlutterTwilioVoicePlugin implements FlutterPlugin, MethodChannel.Me
         plugin.methodChannel = new MethodChannel(messenger, CHANNEL_NAME + "/messages");
         plugin.methodChannel.setMethodCallHandler(plugin);
 
+
         plugin.eventChannel = new EventChannel(messenger, CHANNEL_NAME + "/events");
         plugin.eventChannel.setStreamHandler(plugin);
 
@@ -112,6 +120,8 @@ public class FlutterTwilioVoicePlugin implements FlutterPlugin, MethodChannel.Me
 
         plugin.notificationManager = (NotificationManager) context.getSystemService(Context.NOTIFICATION_SERVICE);
         plugin.voiceBroadcastReceiver = new VoiceBroadcastReceiver(plugin);
+        plugin.audioSwitch = new AudioSwitch(context);
+
         plugin.registerReceiver();
 
         /*
@@ -246,6 +256,8 @@ public class FlutterTwilioVoicePlugin implements FlutterPlugin, MethodChannel.Me
             LocalBroadcastManager.getInstance(this.activity).registerReceiver(
               voiceBroadcastReceiver, intentFilter);
             isReceiverRegistered = true;
+
+            startAudioSwitchListener();
         }
     }
 
@@ -253,6 +265,8 @@ public class FlutterTwilioVoicePlugin implements FlutterPlugin, MethodChannel.Me
         if (isReceiverRegistered) {
             LocalBroadcastManager.getInstance(this.activity).unregisterReceiver(voiceBroadcastReceiver);
             isReceiverRegistered = false;
+
+            audioSwitch.stop();
         }
     }
 
@@ -393,7 +407,10 @@ public class FlutterTwilioVoicePlugin implements FlutterPlugin, MethodChannel.Me
             this.disconnect();
             result.success(true);
         } else if (call.method.equals("toggleSpeaker")) {
-            // nuthin
+            showAudioDevices();
+            result.success(true);
+        } else if (call.method.equals("getSpeakerOptions")) {
+
             result.success(true);
         } else if (call.method.equals("muteCall")) {
             Log.d(TAG, "Muting call");
@@ -527,7 +544,7 @@ public class FlutterTwilioVoicePlugin implements FlutterPlugin, MethodChannel.Me
              * the answerOnBridge flag provided in the Dial verb of your TwiML application
              * associated with this client. If the answerOnBridge flag is false, which is the
              * default, the Call.Listener.onConnected() callback will be emitted immediately after
-             * Call.Listener.onRinging(). If the answerOnBridge flag is true, this will cause the
+             * Call.Listener. FonRinging(). If the answerOnBridge flag is true, this will cause the
              * call to emit the onConnected callback only after the call is answered.
              * See answeronbridge for more details on how to use it with the Dial TwiML verb. If the
              * twiML response contains a Say verb, then the call will emit the
@@ -545,7 +562,7 @@ public class FlutterTwilioVoicePlugin implements FlutterPlugin, MethodChannel.Me
 
             @Override
             public void onConnectFailure(Call call, CallException error) {
-                setAudioFocus(false);
+                audioSwitch.deactivate();
                 Log.d(TAG, "Connect failure");
                 String message = String.format("Call Error: %d, %s", error.getErrorCode(), error.getMessage());
                 Log.e(TAG, message);
@@ -559,7 +576,10 @@ public class FlutterTwilioVoicePlugin implements FlutterPlugin, MethodChannel.Me
 
             @Override
             public void onConnected(Call call) {
-                setAudioFocus(true);
+
+                audioSwitch.activate();
+                queryAndSendAudioDeviceInfo();
+
                 Log.d(TAG, "Connected");
                 activeCall = call;
 
@@ -589,7 +609,7 @@ public class FlutterTwilioVoicePlugin implements FlutterPlugin, MethodChannel.Me
 
             @Override
             public void onDisconnected(Call call, CallException error) {
-                setAudioFocus(false);
+                audioSwitch.deactivate();
                 Log.d(TAG, "Disconnected");
                 if (error != null) {
                     String message = String.format("Call Error: %d, %s", error.getErrorCode(), error.getMessage());
@@ -644,54 +664,54 @@ public class FlutterTwilioVoicePlugin implements FlutterPlugin, MethodChannel.Me
         }
     }
 
-    private void setAudioFocus(boolean setFocus) {
-        // TODO: Figure this out!!!!
-
-        if (audioManager != null) {
-            if (setFocus) {
-                savedAudioMode = audioManager.getMode();
-                // Request audio focus before making any device switch.
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                    AudioAttributes playbackAttributes = new AudioAttributes.Builder()
-                      .setUsage(AudioAttributes.USAGE_VOICE_COMMUNICATION)
-                      .setContentType(AudioAttributes.CONTENT_TYPE_SPEECH)
-                      .build();
-                    AudioFocusRequest focusRequest = new AudioFocusRequest.Builder(AudioManager.AUDIOFOCUS_GAIN_TRANSIENT)
-                      .setAudioAttributes(playbackAttributes)
-                      .setAcceptsDelayedFocusGain(true)
-                      .setOnAudioFocusChangeListener(new AudioManager.OnAudioFocusChangeListener() {
-                          @Override
-                          public void onAudioFocusChange(int i) {
-                          }
-                      })
-                      .build();
-                    audioManager.requestAudioFocus(focusRequest);
-                } else {
-                    if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.FROYO) {
-                        int focusRequestResult = audioManager.requestAudioFocus(
-                          new AudioManager.OnAudioFocusChangeListener() {
-
-                              @Override
-                              public void onAudioFocusChange(int focusChange)
-                              {
-                              }
-                          }, AudioManager.STREAM_VOICE_CALL,
-                          AudioManager.AUDIOFOCUS_GAIN_TRANSIENT);
-                    }
-                }
-                /*
-                 * Start by setting MODE_IN_COMMUNICATION as default audio mode. It is
-                 * required to be in this mode when playout and/or recording starts for
-                 * best possible VoIP performance. Some devices have difficulties with speaker mode
-                 * if this is not set.
-                 */
-                audioManager.setMode(AudioManager.MODE_IN_COMMUNICATION);
-            } else {
-                audioManager.setMode(savedAudioMode);
-                audioManager.abandonAudioFocus(null);
-            }
-        }
-    }
+//    private void setAudioFocus(boolean setFocus) {
+//        // TODO: Figure this out!!!!
+//
+//        if (audioManager != null) {
+//            if (setFocus) {
+//                savedAudioMode = audioManager.getMode();
+//                // Request audio focus before making any device switch.
+//                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+//                    AudioAttributes playbackAttributes = new AudioAttributes.Builder()
+//                      .setUsage(AudioAttributes.USAGE_VOICE_COMMUNICATION)
+//                      .setContentType(AudioAttributes.CONTENT_TYPE_SPEECH)
+//                      .build();
+//                    AudioFocusRequest focusRequest = new AudioFocusRequest.Builder(AudioManager.AUDIOFOCUS_GAIN_TRANSIENT)
+//                      .setAudioAttributes(playbackAttributes)
+//                      .setAcceptsDelayedFocusGain(true)
+//                      .setOnAudioFocusChangeListener(new AudioManager.OnAudioFocusChangeListener() {
+//                          @Override
+//                          public void onAudioFocusChange(int i) {
+//                          }
+//                      })
+//                      .build();
+//                    audioManager.requestAudioFocus(focusRequest);
+//                } else {
+//                    if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.FROYO) {
+//                        int focusRequestResult = audioManager.requestAudioFocus(
+//                          new AudioManager.OnAudioFocusChangeListener() {
+//
+//                              @Override
+//                              public void onAudioFocusChange(int focusChange)
+//                              {
+//                              }
+//                          }, AudioManager.STREAM_VOICE_CALL,
+//                          AudioManager.AUDIOFOCUS_GAIN_TRANSIENT);
+//                    }
+//                }
+//                /*
+//                 * Start by setting MODE_IN_COMMUNICATION as default audio mode. It is
+//                 * required to be in this mode when playout and/or recording starts for
+//                 * best possible VoIP performance. Some devices have difficulties with speaker mode
+//                 * if this is not set.
+//                 */
+//                audioManager.setMode(AudioManager.MODE_IN_COMMUNICATION);
+//            } else {
+//                audioManager.setMode(savedAudioMode);
+//                audioManager.abandonAudioFocus(null);
+//            }
+//        }
+//    }
 
     private boolean checkPermissionForMicrophone() {
         int resultMic = ContextCompat.checkSelfPermission(this.context, Manifest.permission.RECORD_AUDIO);
@@ -742,25 +762,103 @@ public class FlutterTwilioVoicePlugin implements FlutterPlugin, MethodChannel.Me
         return params;
     }
 
-/*
+    private void startAudioSwitchListener() {
+        // This is a callback that is called any time the audio devices change.
+        audioSwitch.start((audioDevices, selectedDevice) -> {
+            Log.i(TAG, "Audio Device Changed. New Device: " + selectedDevice);
+            sendAudioDeviceInfo(audioDevices, selectedDevice);
 
-    @Override
-    public void onRequestPermissionsResult(int requestCode, @NonNull String[] permissions, @NonNull int[] grantResults) {
-        */
-/*
-         * Check if microphone permissions is granted
-         *//*
+            return Unit.INSTANCE;
+        });
+    }
 
-        if (requestCode == MIC_PERMISSION_REQUEST_CODE && permissions.length > 0) {
-            if (grantResults[0] != PackageManager.PERMISSION_GRANTED) {
+    private void queryAndSendAudioDeviceInfo() {
+        AudioDevice selectedDevice = audioSwitch.getSelectedAudioDevice();
+        List<AudioDevice> audioDevices = audioSwitch.getAvailableAudioDevices();
 
-                Log.d(TAG, "Microphone permissions needed. Please allow in your application settings.");
-            }*/
-/* else {
-                retrieveAccessToken();
-            }*//*
+        sendAudioDeviceInfo(audioDevices, selectedDevice);
+    }
 
+    private void sendAudioDeviceInfo(List<? extends AudioDevice> audioDevices, AudioDevice selectedDevice) {
+        boolean hasBluetooth = false;
+        for (AudioDevice a : audioDevices) {
+            if (a instanceof AudioDevice.BluetoothHeadset) {
+                hasBluetooth = true;
+                break;
+            }
+        }
+        // Send event to client to let it know of the new audio status
+        final HashMap<String, Object> params = new HashMap<>();
+        params.put("event",  CallState.audio_route_change.name());
+        params.put("bluetooth_available",  hasBluetooth);
+        params.put("speaker_on",  selectedDevice instanceof AudioDevice.Speakerphone);
+        params.put("devices",  audioDevicesToJSON(audioDevices, selectedDevice));
+
+        Log.i(TAG, "Audio device changed, params: " + params);
+        sendPhoneCallEvents(params);
+    }
+
+    private List<HashMap<String, Object>> audioDevicesToJSON(List<? extends AudioDevice> audioDevices, AudioDevice selectedDevice) {
+
+        // Send event to client to let it know of the new audio status
+        final ArrayList audioDevicesList = new ArrayList();
+
+        if (audioDevices != null) {
+            for (AudioDevice audioDevice : audioDevices) {
+
+                final HashMap<String, Object> audioDeviceJSON = new HashMap<>();
+                audioDeviceJSON.put("name",  audioDevice.getName());
+                audioDeviceJSON.put("selected",  selectedDevice != null ? audioDevice.equals(selectedDevice) : false);
+                audioDeviceJSON.put("type",  getAudioDeviceType(audioDevice));
+                audioDevicesList.add(audioDeviceJSON);
+            }
+        }
+        return audioDevicesList;
+    }
+
+    private String getAudioDeviceType(AudioDevice audioDevice) {
+        if (audioDevice instanceof AudioDevice.BluetoothHeadset) {
+            return "bluetooth";
+        } else if (audioDevice instanceof AudioDevice.WiredHeadset) {
+            return "wired_headset";
+        } else if (audioDevice instanceof AudioDevice.Earpiece) {
+            return "earpiece";
+        } else if (audioDevice instanceof AudioDevice.Speakerphone) {
+            return "speaker";
+        }
+        return null;
+    }
+
+    /*
+     * Show the current available audio devices.
+     */
+    private void showAudioDevices() {
+        AudioDevice selectedDevice = audioSwitch.getSelectedAudioDevice();
+        List<AudioDevice> availableAudioDevices = audioSwitch.getAvailableAudioDevices();
+
+        if (selectedDevice != null) {
+            int selectedDeviceIndex = availableAudioDevices.indexOf(selectedDevice);
+
+            AudioDevice currentDevice = audioSwitch.getSelectedAudioDevice();
+            Log.i(TAG, "Selected Device: " + currentDevice);
+
+            ArrayList<AudioDevice> audioDevices = new ArrayList<>();
+
+            for (AudioDevice a : availableAudioDevices) {
+                Log.i(TAG, "Available Device: " + a.getName());
+                audioDevices.add(a);
+            }
+            for (AudioDevice a : audioDevices) {
+                if (!a.equals(currentDevice)) {
+                    audioSwitch.selectDevice(a);
+                    Log.i(TAG, "Switched from " + currentDevice.getName() + " to " + a.getName());
+                    break;
+                }
+            }
+            ArrayList<String> audioDeviceNames = new ArrayList<>();
+            for (AudioDevice a : audioDevices) {
+                audioDeviceNames.add(a.getName());
+            }
         }
     }
-*/
 }

@@ -20,6 +20,7 @@ enum CallState: String {
     case mute                   = "mute"
     case speaker_on             = "speaker_on"
     case speaker_off            = "speaker_off"
+    case audio_route_change     = "audio_route_change"
 }
 enum CallDirection: String {
     case incoming = "incoming"
@@ -81,6 +82,10 @@ public class SwiftFlutterTwilioVoicePlugin: NSObject, FlutterPlugin,  FlutterStr
         voipRegistry.delegate = self
         voipRegistry.desiredPushTypes = Set([PKPushType.voIP])
 
+        // This Observer listens for state changes in the mic/speaker
+        NotificationCenter.default.addObserver(
+                self, selector:#selector(SwiftFlutterTwilioVoicePlugin.audioRouteChanged(_:)),
+                name:AVAudioSession.routeChangeNotification, object:nil)
 
          let appDelegate = UIApplication.shared.delegate
          guard let controller = appDelegate?.window??.rootViewController as? FlutterViewController else {
@@ -163,7 +168,8 @@ public class SwiftFlutterTwilioVoicePlugin: NSObject, FlutterPlugin,  FlutterStr
     else if flutterCall.method == "toggleSpeaker"
     {
         guard let speakerIsOn = arguments["speakerIsOn"] as? Bool else {return}
-        toggleAudioRoute(toSpeaker: speakerIsOn)
+        CMAudioUtils.toggleSpeaker(on: speakerIsOn)
+        // toggleAudioRoute(toSpeaker: speakerIsOn)
         sendPhoneCallEvents(json: ["event": speakerIsOn ? CallState.speaker_on.rawValue : CallState.speaker_off.rawValue])
     }
     else if flutterCall.method == "isOnCall"
@@ -772,6 +778,35 @@ public class SwiftFlutterTwilioVoicePlugin: NSObject, FlutterPlugin,  FlutterStr
             return
         }
         eventSink(json)
+    }
+
+        // MARK: AV Functions (microphone handling)
+
+    @objc func audioRouteChanged(_ notification:Notification) {
+
+        if let userInfo = notification.userInfo {
+            let reason = userInfo[AVAudioSessionRouteChangeReasonKey] as! UInt
+            
+            CMAudioUtils.printAudioChangeReason(reason: reason)
+            
+            switch (reason) {
+            case AVAudioSession.RouteChangeReason.noSuitableRouteForCategory.rawValue,
+                 AVAudioSession.RouteChangeReason.override.rawValue,
+                 AVAudioSession.RouteChangeReason.categoryChange.rawValue,
+                 AVAudioSession.RouteChangeReason.oldDeviceUnavailable.rawValue,
+                 AVAudioSession.RouteChangeReason.newDeviceAvailable.rawValue:
+                
+                DispatchQueue.main.async(execute: { () -> Void in
+                    self.sendPhoneCallEvents(json: ["event": CallState.audio_route_change.rawValue, 
+                        "bluetooth_available": CMAudioUtils.isBluetoothsAudioInputAvailable(), 
+                        "speaker_on": CMAudioUtils.isSpeakerOn() ])
+                })
+
+                break
+            default:
+                break
+            }
+        }
     }
 
     private func sendErrorEvent(message: String, details: String?=nil) {
