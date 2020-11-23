@@ -9,6 +9,28 @@
 import Foundation
 import MediaPlayer
 
+enum CMAudioDeviceType: String {
+    case blueTooth      = "bluetooth";
+    case wiredHeadset   = "wired_headset";
+    case earpiece       = "earpiece";
+    case speaker        = "speaker";
+}
+
+struct CMAudioDevice {
+    init(id: String?=nil, name: String?=nil, type: CMAudioDeviceType?=nil, selected: Bool?=false){
+        
+        self.id = id
+        self.name = name
+        self.type = type
+        self.selected = selected
+    }
+    
+    var id: String?
+    var name: String?
+    var type: CMAudioDeviceType?
+    var selected: Bool?
+}
+
 class CMAudioUtils {
     
     public static func isBluetoothsAudioInputAvailable() -> Bool {
@@ -67,6 +89,56 @@ class CMAudioUtils {
         }
     }
     
+    public static func audioDevices() ->  [CMAudioDevice]? {
+        let session = AVAudioSession.sharedInstance()
+        var devices = [CMAudioDevice]()
+        let currentDeviceUid = session.currentRoute.inputs.first?.uid
+        
+        // Add default types.
+        devices.append(CMAudioDevice(id: "iPhone", name: "iPhone", type: CMAudioDeviceType.earpiece))
+        devices.append(CMAudioDevice(id: "Speaker", name: "Speaker", type: CMAudioDeviceType.speaker, selected: isSpeakerOn()))
+        
+        if let arrayInputs = session.availableInputs {
+            for input in arrayInputs {
+                switch input.portType {
+                    case .bluetoothHFP:
+                        devices.append(CMAudioDevice(id: input.uid, name: input.portName, type: CMAudioDeviceType.blueTooth, selected: input.uid == currentDeviceUid))
+                        print("============= Yo, I found a bluethooth audio device - \(input.portName)!")
+                    case .carAudio:
+                        devices.append(CMAudioDevice(id: input.uid, name: input.portName, type: CMAudioDeviceType.blueTooth, selected: input.uid == currentDeviceUid))
+                        print("============= Yo, I found a CAR audio device - \(input.portName)!")
+                    case .headsetMic:
+                        devices.append(CMAudioDevice(id: input.uid, name: input.portName, type: CMAudioDeviceType.wiredHeadset, selected: input.uid == currentDeviceUid))
+                        print("============= Yo, I found a headset - \(input.portName)!")
+                    default:
+                        break;
+                }
+            }
+        }
+        print("Available Devices:")
+        for device in devices {
+            print(device)
+        }
+        return devices
+    }
+
+    public static func audioDevicesToJSON(audioDevices: [CMAudioDevice]?) -> [[String: Any]] {
+
+        var audioDevicesList = [[String:Any]]();
+        
+        if let devices = audioDevices {
+            for device in devices {
+                var deviceJSON = [String:Any]();
+                if let value = device.name { deviceJSON.updateValue(value, forKey: "name") }
+                if let value = device.selected { deviceJSON.updateValue(value, forKey: "selected") }
+                if let value = device.type?.rawValue { deviceJSON.updateValue(value, forKey: "type") }
+                if let value = device.id { deviceJSON.updateValue(value, forKey: "id") }
+                audioDevicesList.append(deviceJSON)
+            }
+        }
+        return audioDevicesList;
+    }
+
     public static func printAudioChangeReason(reason: UInt) {
         
         print("=======================================================")

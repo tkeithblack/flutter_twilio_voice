@@ -797,18 +797,22 @@ public class SwiftFlutterTwilioVoicePlugin: NSObject, FlutterPlugin,  FlutterStr
                  AVAudioSession.RouteChangeReason.newDeviceAvailable.rawValue:
                 
                 DispatchQueue.main.async(execute: { () -> Void in
+                    
+                    let audioDevices = CMAudioUtils.audioDevices()
+                    
                     self.sendPhoneCallEvents(json: ["event": CallState.audio_route_change.rawValue, 
                         "bluetooth_available": CMAudioUtils.isBluetoothsAudioInputAvailable(), 
-                        "speaker_on": CMAudioUtils.isSpeakerOn() ])
+                        "speaker_on": CMAudioUtils.isSpeakerOn(),
+                        "devices" : CMAudioUtils.audioDevicesToJSON(audioDevices:audioDevices)
+                    ])
                 })
-
                 break
             default:
                 break
             }
         }
     }
-
+    
     private func sendErrorEvent(message: String, details: String?=nil) {
         NSLog(message)
         guard let eventSink = eventSink else {

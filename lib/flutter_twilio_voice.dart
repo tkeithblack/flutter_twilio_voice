@@ -26,6 +26,7 @@ enum AudioDeviceType { bluetooth, wired_headset, earpiece, speaker }
 
 class AudioDevice {
   AudioDevice();
+  String id;
   String name;
   AudioDeviceType type;
   bool selected;
@@ -33,7 +34,8 @@ class AudioDevice {
   factory AudioDevice.fromJson(Map<dynamic, dynamic> json) {
     var audioDevice = AudioDevice()
       ..name = json['name'] as String
-      ..selected = json['selected'] as bool;
+      ..selected = json['selected'] as bool
+      ..id = json['id'];
 
     switch (json['type']) {
       case 'bluetooth':
