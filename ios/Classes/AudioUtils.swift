@@ -17,7 +17,7 @@ enum CMAudioDeviceType: String {
 }
 
 struct CMAudioDevice {
-    init(id: String?=nil, name: String?=nil, type: CMAudioDeviceType?=nil, selected: Bool?=false){
+    init(id: String?=nil, name: String?=nil, type: CMAudioDeviceType?=nil, selected: Bool?=false, portDescription: AVAudioSessionPortDescription?=nil){
         
         self.id = id
         self.name = name
@@ -29,12 +29,14 @@ struct CMAudioDevice {
     var name: String?
     var type: CMAudioDeviceType?
     var selected: Bool?
+    var portDescription: AVAudioSessionPortDescription?
 }
 
 class CMAudioUtils {
     
     public static func isBluetoothsAudioInputAvailable() -> Bool {
         print("*** availableInputs ***")
+        
         if let arrayInputs = AVAudioSession.sharedInstance().availableInputs {
             for input in arrayInputs {
                 print(input)
@@ -69,7 +71,17 @@ class CMAudioUtils {
         }
         return false
     }
-    
+
+    public static func isEarpieceOn() -> Bool {
+        let session = AVAudioSession.sharedInstance()
+        for port in session.currentRoute.outputs {
+            if port.portType == AVAudioSession.Port.builtInReceiver {
+                return true
+            }
+        }
+        return false
+    }
+
     public static func toggleSpeaker(on: Bool) {
         let session = AVAudioSession.sharedInstance()
         if on {
@@ -89,26 +101,114 @@ class CMAudioUtils {
         }
     }
     
+    public static func selectAudioDevice(deviceID: String) {
+        
+        let session = AVAudioSession.sharedInstance()
+        let audioDevices = CMAudioUtils.audioDevices()
+        let currentRoute = session.currentRoute
+                
+        print("Output DataSource:")
+        print(AVAudioSession.sharedInstance().outputDataSource ?? "No Output data source.");
+        
+        guard let outputs = session.outputDataSources else {
+            print("ERROR: Cannot acceses Audio Output Devices");
+            return
+        }
+        
+        print("Available audio device outputs:")
+        print(outputs)
+        for output in outputs {
+            print(output)
+        }
+
+        guard let inputs = session.inputDataSources else {
+            print("ERROR: Cannot acceses Audio Output Devices");
+            return
+        }
+        
+        print("Available audio device inputs:")
+        print(inputs)
+        for input in inputs {
+            print(input)
+        }
+
+        if let device = audioDevices?.first(where: {$0.id == deviceID}) {
+            // If id == iPhone then we set to the earpiece
+            if device.id == "iPhone" {
+                do {
+                    try session.setOutputDataSource(nil)
+                    print("Manually setting output to Earpiece")
+                } catch {
+                    print("ERROR: Faield Manually setting output to Earpiece")
+                }
+                return
+            } else if device.id == "Speaker" {
+                toggleSpeaker(on: true)
+                return
+            } else {
+                if isSpeakerOn() {
+                    toggleSpeaker(on: false)
+                }
+                do {
+                    try session.setPreferredInput(device.portDescription)
+                    print("Manually setting to \(String(describing: device.name))")
+                } catch {
+                    print("ERROR: Faield Manually setting to \(String(describing: device.name))")
+                }
+                
+            }
+        }
+//        print("ERROR: Passed in Audio deviceID not found")
+//
+//        audioDevices?.first(where: <#T##(CMAudioDevice) throws -> Bool#>)
+//
+//        switch deviceID {
+//            case <#pattern#>:
+//            <#code#>
+//            default:
+//            <#code#>
+//        }
+//
+//        if on {
+//            do {
+//                try session.overrideOutputAudioPort(.speaker)
+//                print("Speaker turned ON")
+//            } catch {
+//                print("Setting calling overrideOutputAudioPort to turn ON speaker. error = \(error.localizedDescription)")
+//            }
+//        } else {
+//            do {
+//                try session.overrideOutputAudioPort(.none)
+//                print("Speaker turned OFF")
+//            } catch {
+//                print("Setting calling overrideOutputAudioPort to turn OFF speaker. error = \(error.localizedDescription)")
+//            }
+//        }
+    }
+    
     public static func audioDevices() ->  [CMAudioDevice]? {
         let session = AVAudioSession.sharedInstance()
         var devices = [CMAudioDevice]()
         let currentDeviceUid = session.currentRoute.inputs.first?.uid
         
         // Add default types.
-        devices.append(CMAudioDevice(id: "iPhone", name: "iPhone", type: CMAudioDeviceType.earpiece))
+        devices.append(CMAudioDevice(id: "iPhone", name: "iPhone", type: CMAudioDeviceType.earpiece, selected: isEarpieceOn()))
         devices.append(CMAudioDevice(id: "Speaker", name: "Speaker", type: CMAudioDeviceType.speaker, selected: isSpeakerOn()))
         
         if let arrayInputs = session.availableInputs {
             for input in arrayInputs {
                 switch input.portType {
                     case .bluetoothHFP:
-                        devices.append(CMAudioDevice(id: input.uid, name: input.portName, type: CMAudioDeviceType.blueTooth, selected: input.uid == currentDeviceUid))
+                        devices.append(CMAudioDevice(id: input.uid, name: input.portName, type: CMAudioDeviceType.blueTooth, selected: input.uid == currentDeviceUid, portDescription: input))
                         print("============= Yo, I found a bluethooth audio device - \(input.portName)!")
                     case .carAudio:
-                        devices.append(CMAudioDevice(id: input.uid, name: input.portName, type: CMAudioDeviceType.blueTooth, selected: input.uid == currentDeviceUid))
+                        devices.append(CMAudioDevice(id: input.uid, name: input.portName, type: CMAudioDeviceType.blueTooth, selected: input.uid == currentDeviceUid, portDescription: input))
                         print("============= Yo, I found a CAR audio device - \(input.portName)!")
                     case .headsetMic:
-                        devices.append(CMAudioDevice(id: input.uid, name: input.portName, type: CMAudioDeviceType.wiredHeadset, selected: input.uid == currentDeviceUid))
+                        devices.append(CMAudioDevice(id: input.uid, name: input.portName, type: CMAudioDeviceType.wiredHeadset, selected: input.uid == currentDeviceUid, portDescription: input))
+                        print("============= Yo, I found a headset - \(input.portName)!")
+                    case .builtInMic:
+                        devices.append(CMAudioDevice(id: input.uid, name: input.portName, type: CMAudioDeviceType.earpiece, selected: input.uid == currentDeviceUid, portDescription: input))
                         print("============= Yo, I found a headset - \(input.portName)!")
                     default:
                         break;

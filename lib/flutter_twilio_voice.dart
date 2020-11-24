@@ -55,6 +55,10 @@ class AudioDevice {
     }
     return audioDevice;
   }
+
+  void printProperties() {
+    print('Name: ${name}, id: ${id}, selected: ${selected}, type: ${type}');
+  }
 }
 
 class FlutterTwilioVoice {
@@ -145,10 +149,17 @@ class FlutterTwilioVoice {
     return _channel.invokeMethod('muteCall', <String, dynamic>{});
   }
 
+  // This method toggles between the speaker and earpiece (or external selcted device)
   Future<bool> toggleSpeaker(bool speakerIsOn) {
     assert(speakerIsOn != null);
     return _channel.invokeMethod(
         'toggleSpeaker', <String, dynamic>{"speakerIsOn": speakerIsOn});
+  }
+
+  // This method selects a specific audio device based on a device ID.
+  Future<bool> selectAudioDevice(String deviceID) {
+    return _channel.invokeMethod(
+        'selectAudioDevice', <String, dynamic>{"deviceID": deviceID});
   }
 
   Future<bool> sendDigits(String digits) {
@@ -223,6 +234,18 @@ class FlutterTwilioVoice {
 
   bool get isBluetoothAvailable {
     return bluetoothAvailable ?? false;
+  }
+
+  bool get isExterenalAudioRouteAvailable {
+    if (_audioDevices != null) {
+      for (var device in _audioDevices) {
+        if (device.type == AudioDeviceType.bluetooth ||
+            device.type == AudioDeviceType.wired_headset) {
+          return true;
+        }
+      }
+    }
+    return false;
   }
 
   List<AudioDevice> get audioDevices {

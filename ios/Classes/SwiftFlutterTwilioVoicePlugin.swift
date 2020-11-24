@@ -169,8 +169,12 @@ public class SwiftFlutterTwilioVoicePlugin: NSObject, FlutterPlugin,  FlutterStr
     {
         guard let speakerIsOn = arguments["speakerIsOn"] as? Bool else {return}
         CMAudioUtils.toggleSpeaker(on: speakerIsOn)
-        // toggleAudioRoute(toSpeaker: speakerIsOn)
-        sendPhoneCallEvents(json: ["event": speakerIsOn ? CallState.speaker_on.rawValue : CallState.speaker_off.rawValue])
+//        sendPhoneCallEvents(json: ["event": speakerIsOn ? CallState.speaker_on.rawValue : CallState.speaker_off.rawValue])
+    }
+    else if flutterCall.method == "selectAudioDevice"
+    {
+        guard let deviceID = arguments["deviceID"] as? String else {return}
+        CMAudioUtils.selectAudioDevice(deviceID: deviceID)
     }
     else if flutterCall.method == "isOnCall"
         {
