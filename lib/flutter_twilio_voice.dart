@@ -56,6 +56,25 @@ class AudioDevice {
     return audioDevice;
   }
 
+  IconData getDeviceIcon() {
+    var icon = Icons.volume_up;
+    switch (type) {
+      case AudioDeviceType.bluetooth:
+        icon = Icons.bluetooth_audio;
+        break;
+      case AudioDeviceType.wired_headset:
+        icon = Icons.headset;
+        break;
+      case AudioDeviceType.earpiece:
+        icon = Icons.phone_in_talk;
+        break;
+      case AudioDeviceType.speaker:
+        icon = Icons.volume_up;
+        break;
+    }
+    return icon;
+  }
+
   void printProperties() {
     print('Name: ${name}, id: ${id}, selected: ${selected}, type: ${type}');
   }
@@ -158,8 +177,10 @@ class FlutterTwilioVoice {
 
   // This method selects a specific audio device based on a device ID.
   Future<bool> selectAudioDevice(String deviceID) {
-    return _channel.invokeMethod(
-        'selectAudioDevice', <String, dynamic>{"deviceID": deviceID});
+    return (deviceID != null)
+        ? _channel.invokeMethod(
+            'selectAudioDevice', <String, dynamic>{"deviceID": deviceID})
+        : false;
   }
 
   Future<bool> sendDigits(String digits) {
@@ -246,6 +267,11 @@ class FlutterTwilioVoice {
       }
     }
     return false;
+  }
+
+  AudioDevice get selectedAudioDevice {
+    return audioDevices.firstWhere((element) => element.selected == true,
+        orElse: () => null);
   }
 
   List<AudioDevice> get audioDevices {
