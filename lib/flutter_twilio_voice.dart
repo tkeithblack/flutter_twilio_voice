@@ -362,20 +362,17 @@ class FlutterTwilioVoice {
   }
 
   void _setCallInfoFromParams({Map<dynamic, dynamic> params}) {
-    var value;
+    if (params['from'] != null) callFrom = _prettyPrintNumber(params['from']);
+    if (params['to'] != null) callTo = _prettyPrintNumber(params['to']);
+    if (params['sid'] != null) sid = params['sid'];
+    if (params['muted'] != null) muted = params['muted'];
+    if (params['onhold'] != null) onHold = params['onhold'];
 
-    value = params["from"];
-    callFrom = value != null ? _prettyPrintNumber(value) : null;
-
-    value = params["to"];
-    callTo = value != null ? _prettyPrintNumber(value) : null;
-
-    sid = params['sid'];
-    muted = params['muted'];
-    onHold = params['onhold'];
-    callDirection = "incoming" == params["direction"]
-        ? CallDirection.incoming
-        : CallDirection.outgoing;
+    if (params["direction"] != null) {
+      callDirection = "incoming" == params["direction"]
+          ? CallDirection.incoming
+          : CallDirection.outgoing;
+    }
   }
 
   void _updateAudioRoute({Map<dynamic, dynamic> params}) {
