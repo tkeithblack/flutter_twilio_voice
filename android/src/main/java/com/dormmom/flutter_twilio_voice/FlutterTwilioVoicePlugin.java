@@ -706,6 +706,9 @@ public class FlutterTwilioVoicePlugin implements FlutterPlugin, MethodChannel.Me
         if (to != null)
             params.put("to", to);
 
+        if (call.getSid() != null)
+            params.put("sid", call.getSid());
+
         params.put("direction", (callOutgoing ? CallDirection.outgoing.name() : CallDirection.incoming.name()));
 
         return params;
