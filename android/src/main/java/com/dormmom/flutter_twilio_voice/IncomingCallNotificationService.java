@@ -76,6 +76,8 @@ public class IncomingCallNotificationService extends Service {
         extras.putString(Constants.CALL_SID_KEY, callInvite.getCallSid());
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            Log.d(TAG, "calling buildNotification() - Build.VERSION.SDK_INT >= Build.VERSION_CODES.O");
+
             return buildNotification(callInvite.getFrom() + " is calling.",
               pendingIntent,
               extras,
@@ -83,6 +85,7 @@ public class IncomingCallNotificationService extends Service {
               notificationId,
               createChannel(channelImportance));
         } else {
+            Log.d(TAG, "calling NotificationCompat.Builder - NOT: Build.VERSION.SDK_INT >= Build.VERSION_CODES.O");
             //noinspection deprecation
             return new NotificationCompat.Builder(this)
               .setSmallIcon(R.drawable.ic_call_end_white_24dp)
@@ -109,6 +112,8 @@ public class IncomingCallNotificationService extends Service {
       final CallInvite callInvite,
       int notificationId,
       String channelId) {
+        Log.d(TAG, "Inside buildNotification(...)");
+
         Intent rejectIntent = new Intent(getApplicationContext(), IncomingCallNotificationService.class);
         rejectIntent.setAction(Constants.ACTION_REJECT);
         rejectIntent.putExtra(Constants.INCOMING_CALL_INVITE, callInvite);
@@ -179,9 +184,9 @@ public class IncomingCallNotificationService extends Service {
     }
 
     private void handleIncomingCall(CallInvite callInvite, int notificationId) {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            setCallInProgressNotification(callInvite, notificationId);
-        }
+//        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+//            setCallInProgressNotification(callInvite, notificationId);
+//        }
         sendCallInviteToActivity(callInvite, notificationId);
         //startForeground(notificationId, createNotification(callInvite, notificationId, 4));
     }
@@ -206,11 +211,12 @@ public class IncomingCallNotificationService extends Service {
      */
     private void sendCallInviteToActivity(CallInvite callInvite, int notificationId) {
         Log.d(TAG, "inside sendCallInviteToActivity(CallInvite callInvite, int notificationId)");
-        if (Build.VERSION.SDK_INT >= 29 && !isAppVisible()) {
-            return;
-        }
-//        Intent intent = new Intent();
-        Log.d(TAG, "Continuing sendCallInviteToActivity(CallInvite callInvite, int notificationId)");
+        Log.d(TAG, "Build.VERSION.SDK_INT = " + Build.VERSION.SDK_INT);
+//        if (Build.VERSION.SDK_INT >= 29 && !isAppVisible()) {
+//            return;
+//        }
+////        Intent intent = new Intent();
+//        Log.d(TAG, "Continuing sendCallInviteToActivity(CallInvite callInvite, int notificationId)");
 
         Intent intent = new Intent();
 //        Intent intent = new Intent(this, FlutterTwilioVoicePlugin.class);
