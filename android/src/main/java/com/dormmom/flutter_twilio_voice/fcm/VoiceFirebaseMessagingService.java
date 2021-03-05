@@ -137,6 +137,10 @@ public class VoiceFirebaseMessagingService extends Service {
     }
 
     private void handleCanceledCallInvite(CancelledCallInvite cancelledCallInvite, @Nullable CallException callException) {
+        Log.d(TAG, "VoiceFirebaseMessagingService.handleCanceledCallInvite:");
+        Log.d(TAG, "cancelledCallInvite = " + cancelledCallInvite );
+        Log.d(TAG, "callException = " + callException );
+
         Intent intent = new Intent(this, IncomingCallNotificationService.class);
         intent.setAction(Constants.ACTION_CANCEL_CALL);
         intent.putExtra(Constants.CANCELLED_CALL_INVITE, cancelledCallInvite);

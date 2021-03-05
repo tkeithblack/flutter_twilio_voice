@@ -27,7 +27,8 @@ public class IncomingCallNotificationService extends Service {
 
     @Override
     public int onStartCommand(Intent intent, int flags, int startId) {
-        Log.d(TAG, "inside OnStartCommand()");
+        Log.d(TAG, "inside OnStartCommand(), intent: " + intent);
+        Log.d(TAG, "IncomingCallNotificationService.this: " + this.toString());
         String action = intent.getAction();
 
         if (action != null) {
@@ -162,6 +163,8 @@ public class IncomingCallNotificationService extends Service {
     }
 
     private void accept(CallInvite callInvite, int notificationId) {
+        Log.d(TAG, "Inside accept(CallInvite callInvite, int notificationId)");
+
         endForeground();
         Intent activeCallIntent = new Intent();
         Intent intent = new Intent(this, FlutterTwilioVoicePlugin.class);
@@ -174,6 +177,7 @@ public class IncomingCallNotificationService extends Service {
     }
 
     private void reject(CallInvite callInvite) {
+        Log.d(TAG, "Inside reject(CallInvite callInvite)");
         endForeground();
         callInvite.reject(getApplicationContext());
     }
@@ -187,6 +191,10 @@ public class IncomingCallNotificationService extends Service {
 //        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
 //            setCallInProgressNotification(callInvite, notificationId);
 //        }
+
+        Log.i(TAG, "handleIncomingCall -  CallInvite = " + callInvite);
+        // TODO: Look at callInvite.getCallerInfo().
+
         sendCallInviteToActivity(callInvite, notificationId);
         //startForeground(notificationId, createNotification(callInvite, notificationId, 4));
     }
@@ -210,7 +218,7 @@ public class IncomingCallNotificationService extends Service {
      * Send the CallInvite to the VoiceActivity. Start the activity if it is not running already.
      */
     private void sendCallInviteToActivity(CallInvite callInvite, int notificationId) {
-        Log.d(TAG, "inside sendCallInviteToActivity(CallInvite callInvite, int notificationId)");
+        Log.d(TAG, "inside sendCallInviteToActivity(CallInvite callInvite, int notificationId= " + notificationId + ")");
         Log.d(TAG, "Build.VERSION.SDK_INT = " + Build.VERSION.SDK_INT);
 //        if (Build.VERSION.SDK_INT >= 29 && !isAppVisible()) {
 //            return;
