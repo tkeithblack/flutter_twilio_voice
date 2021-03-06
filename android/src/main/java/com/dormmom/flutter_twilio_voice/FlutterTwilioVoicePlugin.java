@@ -134,7 +134,7 @@ public class FlutterTwilioVoicePlugin implements FlutterPlugin, MethodChannel.Me
          */
         //setVolumeControlStream(AudioManager.STREAM_VOICE_CALL);
 
-        Voice.setLogLevel(LogLevel.ALL);
+        Voice.setLogLevel(LogLevel.INFO);
         Log.i(TAG, "TwilioVoice Version: " + Voice.getVersion());
         Log.i(TAG, "TwilioVoice Log Level: " + Voice.getLogLevel());
     }
@@ -222,6 +222,9 @@ public class FlutterTwilioVoicePlugin implements FlutterPlugin, MethodChannel.Me
         // Sometimes we get more than one invite from Twilio for the same call.
         // When this happens the we should not process the second invite.
         if (activeInviteCount++ == 0) {
+            // TODO: See if we can read callerInfo from getCallerInfo();
+//            CallerInfo callerInfo = activeCallInvite.getCallerInfo();
+
             activeCallInvite = callInvite;
             activeCallNotificationId = notificationId;
 
