@@ -3,199 +3,398 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
-enum CallState { ringing, connected, call_ended, unhold, hold, unmute, mute, speaker_on, speaker_off, log, answer }
+enum CallState {
+  ringing,
+  connected,
+  reconnecting,
+  reconnected,
+  connect_failed,
+  call_invite,
+  call_invite_canceled,
+  call_ended,
+  unhold,
+  hold,
+  unmute,
+  mute,
+  speaker_on,
+  speaker_off,
+  audio_route_change
+}
 enum CallDirection { incoming, outgoing }
 
-typedef OnDeviceTokenChanged = Function(String token);
+enum AudioDeviceType { bluetooth, wired_headset, earpiece, speaker }
+
+class AudioDevice {
+  AudioDevice();
+  String id;
+  String name;
+  AudioDeviceType type;
+  bool selected;
+
+  factory AudioDevice.fromJson(Map<dynamic, dynamic> json) {
+    var audioDevice = AudioDevice()
+      ..name = json['name'] as String
+      ..selected = json['selected'] as bool
+      ..id = json['id'];
+
+    switch (json['type']) {
+      case 'bluetooth':
+        audioDevice.type = AudioDeviceType.bluetooth;
+        break;
+      case 'wired_headset':
+        audioDevice.type = AudioDeviceType.wired_headset;
+        break;
+      case 'earpiece':
+        audioDevice.type = AudioDeviceType.earpiece;
+        break;
+      case 'speaker':
+        audioDevice.type = AudioDeviceType.speaker;
+        break;
+      default:
+        break;
+    }
+    return audioDevice;
+  }
+
+  IconData getDeviceIcon() {
+    var icon = Icons.volume_up;
+    switch (type) {
+      case AudioDeviceType.bluetooth:
+        icon = Icons.bluetooth_audio;
+        break;
+      case AudioDeviceType.wired_headset:
+        icon = Icons.headset;
+        break;
+      case AudioDeviceType.earpiece:
+        icon = Icons.phone_in_talk;
+        break;
+      case AudioDeviceType.speaker:
+        icon = Icons.volume_up;
+        break;
+    }
+    return icon;
+  }
+
+  void printProperties() {
+    print('Name: ${name}, id: ${id}, selected: ${selected}, type: ${type}');
+  }
+}
 
 class FlutterTwilioVoice {
-  static const MethodChannel _channel = const MethodChannel('flutter_twilio_voice/messages');
+  static final String ACTION_ACCEPT = "ACTION_ACCEPT";
+  static final String ACTION_REJECT = "ACTION_REJECT";
+  static final String ACTION_INCOMING_CALL_NOTIFICATION =
+      "ACTION_INCOMING_CALL_NOTIFICATION";
+  static final String ACTION_INCOMING_CALL = "ACTION_INCOMING_CALL";
+  static final String ACTION_CANCEL_CALL = "ACTION_CANCEL_CALL";
+  static final String ACTION_FCM_TOKEN = "ACTION_FCM_TOKEN";
 
-  static const EventChannel _eventChannel = EventChannel('flutter_twilio_voice/events');
+  static final String ANDROID_CALLINVITE_INTENT_ACTION =
+      "com.flutter.android.twilio.callinvite_message";
 
-  static Stream<CallState> _onCallStateChanged;
-  static String callFrom;
-  static String callTo;
-  static int callStartedOn;
-  static CallDirection callDirection = CallDirection.incoming;
-  static OnDeviceTokenChanged deviceTokenChanged;
+  final MethodChannel _channel =
+      const MethodChannel('flutter_twilio_voice/messages');
 
-  static Stream<CallState> get onCallStateChanged {
+  final EventChannel _eventChannel =
+      EventChannel('flutter_twilio_voice/events');
+
+  Stream<CallState> _onCallStateChanged;
+  String callFrom;
+  String callTo;
+  String sid;
+  bool muted;
+  bool onHold;
+  bool speakerOn;
+  bool bluetoothAvailable;
+  var _audioDevices = List<AudioDevice>();
+
+  int callStartedOn;
+  CallDirection callDirection = CallDirection.incoming;
+
+  Stream<CallState> get onCallStateChanged {
     if (_onCallStateChanged == null) {
-      _onCallStateChanged = _eventChannel.receiveBroadcastStream().map((dynamic event) => _parseCallState(event));
+      _onCallStateChanged = _eventChannel
+          .receiveBroadcastStream()
+          .map((dynamic event) => _parseCallState(event));
     }
     return _onCallStateChanged;
   }
 
-  static void setOnDeviceTokenChanged(OnDeviceTokenChanged deviceTokenChanged) {
-    FlutterTwilioVoice.deviceTokenChanged = deviceTokenChanged;
-  }
-
-  static Future<bool> tokens({@required String accessToken, String deviceToken}) {
+  Future<bool> tokens(
+      {@required String accessToken, @required String fcmToken}) {
     assert(accessToken != null);
-    return _channel.invokeMethod('tokens', <String, dynamic>{"accessToken": accessToken, "deviceToken": deviceToken});
+    return _channel.invokeMethod('tokens',
+        <String, dynamic>{"accessToken": accessToken, "fcmToken": fcmToken});
   }
 
-  static Future<bool> unregister(String accessToken) {
-    return _channel.invokeMethod('unregister', <String, dynamic>{"accessToken": accessToken});
+  Future<bool> unregister() {
+    return _channel.invokeMethod('unregister', <String, dynamic>{});
   }
 
-  static Future<bool> makeCall({@required String from, @required String to, Map<String, dynamic> extraOptions}) {
+  Future<bool> makeCall(
+      {@required String from,
+      @required String to,
+      String toDisplayName,
+      Map<String, dynamic> extraOptions}) {
     assert(to != null);
     assert(from != null);
     var options = extraOptions != null ? extraOptions : Map<String, dynamic>();
     options['from'] = from;
     options['to'] = to;
+    options['toDisplayName'] = toDisplayName;
     callFrom = from;
     callTo = to;
     callDirection = CallDirection.outgoing;
     return _channel.invokeMethod('makeCall', options);
   }
 
-  static Future<bool> hangUp() {
+  Future<bool> hangUp() {
     return _channel.invokeMethod('hangUp', <String, dynamic>{});
   }
 
-  static Future<bool> answer() {
+  Future<bool> answer() {
     return _channel.invokeMethod('answer', <String, dynamic>{});
   }
 
-  static Future<bool> holdCall() {
+  Future<bool> reject() {
+    return _channel.invokeMethod('reject', <String, dynamic>{});
+  }
+
+  Future<bool> holdCall() {
     return _channel.invokeMethod('holdCall', <String, dynamic>{});
   }
 
-  static Future<bool> muteCall() {
+  Future<bool> toggleMute() {
     return _channel.invokeMethod('muteCall', <String, dynamic>{});
   }
 
-  static Future<bool> toggleSpeaker(bool speakerIsOn) {
+  // This method toggles between the speaker and earpiece (or external selcted device)
+  Future<bool> toggleSpeaker(bool speakerIsOn) {
     assert(speakerIsOn != null);
-    return _channel.invokeMethod('toggleSpeaker', <String, dynamic>{"speakerIsOn": speakerIsOn});
+    return _channel.invokeMethod(
+        'toggleSpeaker', <String, dynamic>{"speakerIsOn": speakerIsOn});
   }
 
-  static Future<bool> sendDigits(String digits) {
+  // This method selects a specific audio device based on a device ID.
+  Future<bool> selectAudioDevice(String deviceID) {
+    return (deviceID != null)
+        ? _channel.invokeMethod(
+            'selectAudioDevice', <String, dynamic>{"deviceID": deviceID})
+        : false;
+  }
+
+  Future<bool> sendDigits(String digits) {
     assert(digits != null);
-    return _channel.invokeMethod('sendDigits', <String, dynamic>{"digits": digits});
+    return _channel
+        .invokeMethod('sendDigits', <String, dynamic>{"digits": digits});
   }
 
-  static Future<bool> requestBackgroundPermissions() {
-    return _channel.invokeMethod('requestBackgroundPermissions', {});
-  }
-
-  static Future<bool> requiresBackgroundPermissions() {
-    return _channel.invokeMethod('requiresBackgroundPermissions', {});
-  }
-
-  static Future<bool> isOnCall() {
+  Future<bool> isOnCall() {
     return _channel.invokeMethod('isOnCall', <String, dynamic>{});
   }
 
-  static Future<bool> registerClient(String clientId, String clientName) {
-    return _channel.invokeMethod('registerClient', <String, dynamic>{"id": clientId, "name": clientName});
+  // Legacy Methods replaced by new version ---------
+  String getFrom() {
+    // replaced by getter fromNumber
+    return fromNumber;
   }
 
-  static Future<bool> unregisterClient(String clientId) {
-    return _channel.invokeMethod('unregisterClient', <String, dynamic>{"id": clientId});
+  String getTo() {
+    // replaced by getter toNumber
+    return toNumber;
   }
 
-  static Future<bool> setDefaultCallerName(String callerName) {
-    return _channel.invokeMethod('defaultCaller', <String, dynamic>{"defaultCaller": callerName});
+  // replaced by toggleMute same functionality, more intuatuve name.
+  Future<bool> muteCall() {
+    return toggleMute();
+  }
+  // End legacy calls --------------------------------
+
+  DateTime get callStartDate {
+    if (callStartedOn != null)
+      return DateTime.fromMillisecondsSinceEpoch(callStartedOn);
+
+    return null;
   }
 
-  static Future<bool> hasMicAccess() {
-    return _channel.invokeMethod('hasMicPermission', {});
+  // same as getFrom in getter form
+  String get fromNumber {
+    return callFrom ?? "";
+    ;
   }
 
-  static Future<bool> requestMicAccess() {
-    return _channel.invokeMethod('requestMicPermission', {});
+  // same as getTo in getter form
+  String get toNumber {
+    return callTo ?? "";
+    ;
   }
 
-  static Future showBackgroundCallUI() {
-    return _channel.invokeMethod("backgroundCallUI", {});
+  String get externalNumber {
+    return callDirection == CallDirection.incoming ? fromNumber : toNumber;
   }
 
-  static String getFrom() {
-    return callFrom;
+  String get internalNumber {
+    return callDirection == CallDirection.outgoing ? fromNumber : toNumber;
   }
 
-  static String getTo() {
-    return callTo;
+  String get callSid {
+    return sid;
   }
 
-  static int getCallStartedOn() {
+  bool get isMuted {
+    return muted ?? false;
+  }
+
+  bool get isOnHold {
+    return onHold ?? false;
+  }
+
+  bool get isSpeakerOn {
+    return speakerOn ?? false;
+  }
+
+  bool get isBluetoothAvailable {
+    return bluetoothAvailable ?? false;
+  }
+
+  bool get isExterenalAudioRouteAvailable {
+    if (_audioDevices != null) {
+      for (var device in _audioDevices) {
+        if (device.type == AudioDeviceType.bluetooth ||
+            device.type == AudioDeviceType.wired_headset) {
+          return true;
+        }
+      }
+    }
+    return false;
+  }
+
+  AudioDevice get selectedAudioDevice {
+    return audioDevices.firstWhere((element) => element.selected == true,
+        orElse: () => null);
+  }
+
+  List<AudioDevice> get audioDevices {
+    return _audioDevices;
+  }
+
+  int getCallStartedOn() {
     return callStartedOn;
   }
 
-  static CallDirection getCallDirection() {
+  CallDirection getCallDirection() {
     return callDirection;
   }
 
-  static CallState _parseCallState(String state) {
-    if (state.startsWith("DEVICETOKEN|")) {
-      var token = state.split('|')[1];
-      if (deviceTokenChanged != null) {
-        deviceTokenChanged(token);
-      }
-      return CallState.log;
-    } else if (state.startsWith("LOG|")) {
-      List<String> tokens = state.split('|');
-      print(tokens[1]);
-      return CallState.log;
-    } else if (state.startsWith("Connected|")) {
-      List<String> tokens = state.split('|');
-      callFrom = _prettyPrintNumber(tokens[1]);
-      callTo = _prettyPrintNumber(tokens[2]);
-      callDirection = ("Incoming" == tokens[3] ? CallDirection.incoming : CallDirection.outgoing);
-      if (callStartedOn == null) {
-        callStartedOn = DateTime.now().millisecondsSinceEpoch;
-      }
-      print('Connected - From: $callFrom, To: $callTo, StartOn: $callStartedOn, Direction: $callDirection');
-      return CallState.connected;
-    } else if (state.startsWith("Ringing|")) {
-      List<String> tokens = state.split('|');
-      callFrom = _prettyPrintNumber(tokens[1]);
-      callTo = _prettyPrintNumber(tokens[2]);
+  CallState _parseCallState(dynamic params) {
+    print("_parseCallState - params: $params");
+    var state = params['event'];
 
-      print('Ringing - From: $callFrom, To: $callTo, Direction: $callDirection');
-      return CallState.ringing;
-    } else if (state.startsWith("Answer")) {
-      List<String> tokens = state.split('|');
-      callFrom = _prettyPrintNumber(tokens[1]);
-      callTo = _prettyPrintNumber(tokens[2]);
-      callDirection = CallDirection.incoming;
-      print('Answer - From: $callFrom, To: $callTo, Direction: $callDirection');
-      return CallState.answer;
-    }
     switch (state) {
-      case 'Ringing':
+      case "call_invite":
+        _setCallInfoFromParams(params: params);
+        callStartedOn = DateTime.now().millisecondsSinceEpoch;
+        callInvite(customParameters: params["customParameters"]);
+        return CallState.call_invite;
+      case "call_invite_canceled":
+        _setCallInfoFromParams(params: params);
+        callStartedOn = DateTime.now().millisecondsSinceEpoch;
+        callInviteCancel(errorMessage: params["error"]);
+        return CallState.call_invite_canceled;
+      case "ringing":
+        _setCallInfoFromParams(params: params);
+        callStartedOn = DateTime.now().millisecondsSinceEpoch;
+        callDidStartRinging();
         return CallState.ringing;
-      case 'Connected':
+      case "connected":
+        _setCallInfoFromParams(params: params);
+        if (callStartedOn == null) {
+          callStartedOn = DateTime.now().millisecondsSinceEpoch;
+        }
+        callDidConnect();
         return CallState.connected;
-      case 'Call Ended':
+      case "reconnecting":
+        _setCallInfoFromParams(params: params);
+        callReconnecting(errorMsg: params["error"]);
+        return CallState.reconnecting;
+      case "reconnected":
+        _setCallInfoFromParams(params: params);
+        callReconnected();
+        return CallState.reconnected;
+      case "connect_failed":
+        _setCallInfoFromParams(params: params);
+        callConnectFailed(errorMsg: params["error"]);
+        return CallState.connect_failed;
+      case "call_ended":
         callStartedOn = null;
         callFrom = null;
         callTo = null;
         callDirection = CallDirection.incoming;
+        callEnded(errorMsg: params["error"]);
         return CallState.call_ended;
-      case 'Unhold':
+      case "unhold":
+        onHold = false;
+        callHoldChanged(isOnHold: onHold);
         return CallState.unhold;
-      case 'Hold':
+      case "hold":
+        onHold = true;
+        callHoldChanged(isOnHold: onHold);
         return CallState.hold;
-      case 'Unmute':
+      case "unmute":
+        muted = false;
+        callMuteChanged(isMuted: muted);
         return CallState.unmute;
-      case 'Mute':
+      case "mute":
+        muted = true;
+        callMuteChanged(isMuted: muted);
         return CallState.mute;
-      case 'Speaker On':
+      case "speaker_on":
         return CallState.speaker_on;
-      case 'Speaker Off':
+      case "speaker_off":
         return CallState.speaker_off;
+      case "audio_route_change":
+        _updateAudioRoute(params: params);
+        return CallState.audio_route_change;
       default:
         print('$state is not a valid CallState.');
         throw ArgumentError('$state is not a valid CallState.');
     }
   }
 
-  static String _prettyPrintNumber(String phoneNumber) {
+  void _setCallInfoFromParams({Map<dynamic, dynamic> params}) {
+    if (params['from'] != null) callFrom = _prettyPrintNumber(params['from']);
+    if (params['to'] != null) callTo = _prettyPrintNumber(params['to']);
+    if (params['sid'] != null) sid = params['sid'];
+    if (params['muted'] != null) muted = params['muted'];
+    if (params['onhold'] != null) onHold = params['onhold'];
+
+    if (params["direction"] != null) {
+      callDirection = "incoming" == params["direction"]
+          ? CallDirection.incoming
+          : CallDirection.outgoing;
+    }
+  }
+
+  void _updateAudioRoute({Map<dynamic, dynamic> params}) {
+    // Update audio devices list.
+    _audioDevices.clear();
+    var devices = params['devices'] as List<dynamic>;
+    if (devices != null) {
+      for (var element in devices) {
+        var device = AudioDevice.fromJson(element);
+        if (device != null) {
+          _audioDevices.add(device);
+        }
+      }
+    }
+
+    bluetoothAvailable = params["bluetooth_available"];
+    speakerOn = params["speaker_on"];
+    callAudioRouteChanged(
+        isBluetoothAvailable: bluetoothAvailable, isSpeaker: speakerOn);
+  }
+
+  String _prettyPrintNumber(String phoneNumber) {
     if (phoneNumber.indexOf('client:') > -1) {
       return phoneNumber.split(':')[1];
     }
@@ -219,4 +418,17 @@ class FlutterTwilioVoice {
         "-" +
         phoneNumber.substring(start + 6);
   }
+
+  // Notification methods that can be overridden
+  void callInvite({Map<dynamic, dynamic> customParameters}) {}
+  void callInviteCancel({String errorMessage}) {}
+  void callDidStartRinging() {}
+  void callDidConnect() {}
+  void callReconnected() {}
+  void callReconnecting({String errorMsg}) {}
+  void callConnectFailed({String errorMsg}) {}
+  void callEnded({String errorMsg}) {}
+  void callHoldChanged({bool isOnHold}) {}
+  void callMuteChanged({bool isMuted}) {}
+  void callAudioRouteChanged({bool isBluetoothAvailable, bool isSpeaker}) {}
 }
