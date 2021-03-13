@@ -409,14 +409,23 @@ public class SwiftFlutterTwilioVoicePlugin: NSObject, FlutterPlugin,  FlutterStr
     public func callInviteReceived(_ ci: TVOCallInvite) {
             NSLog("callInviteReceived:")
 
+        // Twilio allows sending custom parameters. The code below checks to see if there is a
+        // parameters called callerId, if so we'll use that number. This allows us to show the
+        // actual from callerId rather than the 'client:ID' notation that may be present when
+        // calling from a server/mobile device.
+        // If this is not provided we'll use the standard callInvite.from.
+        var callerId:String?
+            if let parameters = ci.customParameters {
+                callerId = parameters["callerId"] ?? ci.from
+            }
+
             initAudioDevice();
-            var from:String = ci.from ?? "Voice Bot"
-            from = from.replacingOccurrences(of: "client:", with: "")
+            let from:String = callerId ?? "Voice Bot"
 
             reportIncomingCall(from: from, uuid: ci.uuid)
             self.callInvite = ci
                 
-            var inviteInfo:[String : Any] = ["event": CallState.call_invite.rawValue, "from": ci.from ?? "", "to": ci.to, "direction": "Incoming", "sid": ci.callSid];
+        var inviteInfo:[String : Any] = ["event": CallState.call_invite.rawValue, "from": from, "to": ci.to, "direction": CallDirection.incoming.rawValue, "sid": ci.callSid];
             if let parameters = ci.customParameters {
                 inviteInfo.updateValue(parameters, forKey: "customParameters")
             }
@@ -436,7 +445,7 @@ public class SwiftFlutterTwilioVoicePlugin: NSObject, FlutterPlugin,  FlutterStr
             }
         
             let ci = cancelledCallInvite;
-            var inviteInfo:[String : Any] = ["event": CallState.call_invite_canceled.rawValue, "from": ci.from ?? "", "to": ci.to, "direction": "Incoming", "sid": ci.callSid];
+        var inviteInfo:[String : Any] = ["event": CallState.call_invite_canceled.rawValue, "from": ci.from ?? "", "to": ci.to, "direction": CallDirection.incoming.rawValue, "sid": ci.callSid];
             if let parameters = ci.customParameters {
                 inviteInfo.updateValue(parameters, forKey: "customParameters")
             }
@@ -828,7 +837,7 @@ public class SwiftFlutterTwilioVoicePlugin: NSObject, FlutterPlugin,  FlutterStr
     }
     
     internal func callToJson(call: TVOCall) -> [String : Any] {
-        let direction = (self.callOutgoing ? "Outgoing" : "Incoming")
+        let direction = (self.callOutgoing ? CallDirection.outgoing.rawValue : CallDirection.incoming.rawValue)
         let from = (call.from ?? self.identity)
         let to = (call.to ?? self.callTo)
         return ["from": from, "to": to, "direction": direction, "sid": call.sid, "muted": call.isMuted, "onhold": call.isOnHold];
