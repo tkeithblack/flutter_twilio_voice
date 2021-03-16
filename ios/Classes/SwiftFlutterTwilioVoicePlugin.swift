@@ -67,7 +67,7 @@ public class SwiftFlutterTwilioVoicePlugin: NSObject, FlutterPlugin,  FlutterStr
         let configuration = CXProviderConfiguration(localizedName: SwiftFlutterTwilioVoicePlugin.appName)
         configuration.maximumCallGroups = 1
         configuration.maximumCallsPerCallGroup = 1
-        if let callKitIcon = UIImage(named: "AppIcon") {
+        if let callKitIcon = UIImage(named: "CallKitAppButtonLogo") {
             configuration.iconTemplateImageData = callKitIcon.pngData()
         }
 
@@ -95,6 +95,7 @@ public class SwiftFlutterTwilioVoicePlugin: NSObject, FlutterPlugin,  FlutterStr
             let eventChannel = FlutterEventChannel(name: "flutter_twilio_voice/events", binaryMessenger: registrar.messenger())
             eventChannel.setStreamHandler(self)
         }
+        CMContacts.cmContacts.loadCache(){}
     }
 
 
@@ -407,50 +408,74 @@ public class SwiftFlutterTwilioVoicePlugin: NSObject, FlutterPlugin,  FlutterStr
 
         // MARK: TVONotificaitonDelegate
     public func callInviteReceived(_ ci: TVOCallInvite) {
-            NSLog("callInviteReceived:")
-
+        NSLog("callInviteReceived:")
+        
         // Twilio allows sending custom parameters. The code below checks to see if there is a
-        // parameters called callerId, if so we'll use that number. This allows us to show the
+        // parameter called callerId, if so we'll use that number. This allows us to show the
         // actual from callerId rather than the 'client:ID' notation that may be present when
         // calling from a server/mobile device.
         // If this is not provided we'll use the standard callInvite.from.
         var callerId:String?
-            if let parameters = ci.customParameters {
-                callerId = parameters["callerId"] ?? ci.from
+        var number:String?
+        var name:String?
+        
+        if let parameters = ci.customParameters {
+            number = parameters["callerId"]
+            name = parameters["lynkName"]
+            callerId = number ?? ci.from
+            if let nam = name {
+                callerId? += ":\(nam)"
             }
-
-            initAudioDevice();
-            let from:String = callerId ?? "Voice Bot"
-
-            reportIncomingCall(from: from, uuid: ci.uuid)
-            self.callInvite = ci
+        }
+                
+        initAudioDevice();
+        let from:String = callerId ?? "Voice Bot"
+        
+        reportIncomingCall(from: from, uuid: ci.uuid)
+        self.callInvite = ci
+        updateCallerIdFromContacts(number: number, name: name)
                 
         var inviteInfo:[String : Any] = ["event": CallState.call_invite.rawValue, "from": from, "to": ci.to, "direction": CallDirection.incoming.rawValue, "sid": ci.callSid];
-            if let parameters = ci.customParameters {
-                inviteInfo.updateValue(parameters, forKey: "customParameters")
-            }
-            sendPhoneCallEvents(json: inviteInfo)
+        if let parameters = ci.customParameters {
+            inviteInfo.updateValue(parameters, forKey: "customParameters")
         }
+        sendPhoneCallEvents(json: inviteInfo)
+    }
 
+    private func updateCallerIdFromContacts(number:String? , name:String? ) {
+        guard let num = number else {
+            return
+        }
+        CMContacts.cmContacts.getContactName(phoneNumber: num, returnImage:false, completionHandler: { contactName, image in
+            if contactName != nil {
+                var callerId = contactName ?? num;
+                if name != nil {
+                    callerId += ":\(name!)"
+                }
+                self.updateCallCallerId(from: callerId)
+            }
+        })
+    }
+    
     public func cancelledCallInviteReceived(_ cancelledCallInvite: TVOCancelledCallInvite, error: Error) {
-            NSLog("cancelledCallInviteCanceled:")
-
-            if (self.callInvite == nil) {
-                NSLog("No pending call invite")
-                return
-            }
-
-            if let ci = self.callInvite {
-                performEndCallAction(uuid: ci.uuid)
-            }
+        NSLog("cancelledCallInviteCanceled:")
         
-            let ci = cancelledCallInvite;
-        var inviteInfo:[String : Any] = ["event": CallState.call_invite_canceled.rawValue, "from": ci.from ?? "", "to": ci.to, "direction": CallDirection.incoming.rawValue, "sid": ci.callSid];
-            if let parameters = ci.customParameters {
-                inviteInfo.updateValue(parameters, forKey: "customParameters")
-            }
-            sendPhoneCallEvents(json: inviteInfo)
+        if (self.callInvite == nil) {
+            NSLog("No pending call invite")
+            return
         }
+        
+        if let ci = self.callInvite {
+            performEndCallAction(uuid: ci.uuid)
+        }
+        
+        let ci = cancelledCallInvite;
+        var inviteInfo:[String : Any] = ["event": CallState.call_invite_canceled.rawValue, "from": ci.from ?? "", "to": ci.to, "direction": CallDirection.incoming.rawValue, "sid": ci.callSid];
+        if let parameters = ci.customParameters {
+            inviteInfo.updateValue(parameters, forKey: "customParameters")
+        }
+        sendPhoneCallEvents(json: inviteInfo)
+    }
 
         // MARK: TVOCallDelegate
     public func callDidStartRinging(_ call: TVOCall) {
@@ -691,6 +716,14 @@ public class SwiftFlutterTwilioVoicePlugin: NSObject, FlutterPlugin,  FlutterStr
             }
         }
 
+        func updateCallCallerId(from: String) {
+            if let ci = callInvite {
+                let callUpdate = CXCallUpdate()
+                callUpdate.localizedCallerName = from
+                self.callKitProvider.reportCall(with: ci.uuid, updated: callUpdate)
+            }
+        }
+        
         func reportIncomingCall(from: String, uuid: UUID) {
             let callHandle = CXHandle(type: .generic, value: from)
 
