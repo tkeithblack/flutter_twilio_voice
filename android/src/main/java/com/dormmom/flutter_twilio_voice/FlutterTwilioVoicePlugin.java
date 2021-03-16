@@ -199,7 +199,7 @@ public class FlutterTwilioVoicePlugin implements FlutterPlugin, MethodChannel.Me
     private void handleIncomingCall(@NonNull CallInvite callInvite, int notificationId) {
 
         // Below we have logic to prevent multiple incoming callInvites. This section
-        // check to make sure the activeInviteCount isn't an old value, if so it will now
+        // checks to make sure the activeInviteCount isn't an old value, if so it will now
         // be reset. This prevents us from getting in a situation where we missed an
         // activeInviteCount reset and can never again receive calls.
         // NOTE: All of this complicated code is because sometimes Twilio sends us more than

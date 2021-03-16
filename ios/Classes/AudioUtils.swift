@@ -3,7 +3,6 @@
 //  CallLinq
 //
 //  Created by Keith Black on 11/17/19.
-//  Copyright © 2019 CrowdMarket. All rights reserved.
 //
 
 import Foundation

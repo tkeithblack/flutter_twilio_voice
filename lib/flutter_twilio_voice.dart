@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -121,13 +122,13 @@ class FlutterTwilioVoice {
   }
 
   Future<bool> tokens(
-      {@required String accessToken, @required String fcmToken}) {
+      {@required String accessToken, @required String fcmToken}) async {
     assert(accessToken != null);
     return _channel.invokeMethod('tokens',
         <String, dynamic>{"accessToken": accessToken, "fcmToken": fcmToken});
   }
 
-  Future<bool> unregister() {
+  Future<bool> unregister() async {
     return _channel.invokeMethod('unregister', <String, dynamic>{});
   }
 
@@ -135,7 +136,7 @@ class FlutterTwilioVoice {
       {@required String from,
       @required String to,
       String toDisplayName,
-      Map<String, dynamic> extraOptions}) {
+      Map<String, dynamic> extraOptions}) async {
     assert(to != null);
     assert(from != null);
     var options = extraOptions != null ? extraOptions : Map<String, dynamic>();
@@ -148,42 +149,42 @@ class FlutterTwilioVoice {
     return _channel.invokeMethod('makeCall', options);
   }
 
-  Future<bool> hangUp() {
+  Future<bool> hangUp() async {
     return _channel.invokeMethod('hangUp', <String, dynamic>{});
   }
 
-  Future<bool> answer() {
+  Future<bool> answer() async {
     return _channel.invokeMethod('answer', <String, dynamic>{});
   }
 
-  Future<bool> reject() {
+  Future<bool> reject() async {
     return _channel.invokeMethod('reject', <String, dynamic>{});
   }
 
-  Future<bool> holdCall() {
+  Future<bool> holdCall() async {
     return _channel.invokeMethod('holdCall', <String, dynamic>{});
   }
 
-  Future<bool> toggleMute() {
+  Future<bool> toggleMute() async {
     return _channel.invokeMethod('muteCall', <String, dynamic>{});
   }
 
   // This method toggles between the speaker and earpiece (or external selcted device)
-  Future<bool> toggleSpeaker(bool speakerIsOn) {
+  Future<bool> toggleSpeaker(bool speakerIsOn) async {
     assert(speakerIsOn != null);
     return _channel.invokeMethod(
         'toggleSpeaker', <String, dynamic>{"speakerIsOn": speakerIsOn});
   }
 
   // This method selects a specific audio device based on a device ID.
-  Future<bool> selectAudioDevice(String deviceID) {
+  Future<bool> selectAudioDevice(String deviceID) async {
     return (deviceID != null)
         ? _channel.invokeMethod(
             'selectAudioDevice', <String, dynamic>{"deviceID": deviceID})
         : false;
   }
 
-  Future<bool> sendDigits(String digits) {
+  Future<bool> sendDigits(String digits) async {
     assert(digits != null);
     return _channel
         .invokeMethod('sendDigits', <String, dynamic>{"digits": digits});

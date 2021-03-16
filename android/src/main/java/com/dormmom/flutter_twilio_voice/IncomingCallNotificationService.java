@@ -20,6 +20,7 @@ import androidx.lifecycle.ProcessLifecycleOwner;
 import androidx.localbroadcastmanager.content.LocalBroadcastManager;
 
 import com.twilio.voice.CallInvite;
+import com.twilio.voice.CallerInfo;
 
 public class IncomingCallNotificationService extends Service {
 
@@ -77,7 +78,7 @@ public class IncomingCallNotificationService extends Service {
         extras.putString(Constants.CALL_SID_KEY, callInvite.getCallSid());
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            Log.d(TAG, "calling buildNotification() - Build.VERSION.SDK_INT >= Build.VERSION_CODES.O");
+            Log.d(TAG, "calling buildNotification() - Build.VERSION.SDK_INT (" + Build.VERSION.SDK_INT +  ") >= Build.VERSION_CODES.O ("  + Build.VERSION_CODES.O +  ")");
 
             return buildNotification(callInvite.getFrom() + " is calling.",
               pendingIntent,
@@ -86,7 +87,7 @@ public class IncomingCallNotificationService extends Service {
               notificationId,
               createChannel(channelImportance));
         } else {
-            Log.d(TAG, "calling NotificationCompat.Builder - NOT: Build.VERSION.SDK_INT >= Build.VERSION_CODES.O");
+            Log.d(TAG, "calling NotificationCompat.Builder - NOT: Build.VERSION.SDK_INT (" + Build.VERSION.SDK_INT +  ") >= Build.VERSION_CODES.O ("  + Build.VERSION_CODES.O +  ")");
             //noinspection deprecation
             return new NotificationCompat.Builder(this)
               .setSmallIcon(R.drawable.ic_call_end_white_24dp)
@@ -193,7 +194,16 @@ public class IncomingCallNotificationService extends Service {
 //        }
 
         Log.i(TAG, "handleIncomingCall -  CallInvite = " + callInvite);
+
         // TODO: Look at callInvite.getCallerInfo().
+        // First glance this seems to just tell us if caller info is verified:
+        // From the documents:
+        // https://twilio.github.io/twilio-voice-android/docs/latest/com/twilio/voice/CallerInfo.html
+        // public Boolean isVerified()
+        // Returns `true` if the caller has been validated at 'A' level, `false` if the caller has been verified at any lower level or has failed validation. Returns `null` if no caller verification information is available or if stir status value is `null`.
+
+//        CallerInfo info = callInvite.getCallerInfo();
+//        Log.d(TAG, "CallerInfo: " + info);
 
         sendCallInviteToActivity(callInvite, notificationId);
         //startForeground(notificationId, createNotification(callInvite, notificationId, 4));
