@@ -219,6 +219,8 @@ public class FlutterTwilioVoicePlugin implements FlutterPlugin, MethodChannel.Me
         }
         lastInviteTime = new Date();
 
+        Log.d(TAG, "handleIncomingCall: activeInviteCount = " + activeInviteCount);
+
         // Sometimes we get more than one invite from Twilio for the same call.
         // When this happens the we should not process the second invite.
         if (activeInviteCount++ == 0) {
@@ -253,6 +255,8 @@ public class FlutterTwilioVoicePlugin implements FlutterPlugin, MethodChannel.Me
 
     private void handleCancel(@NonNull CancelledCallInvite cancelledCallInvite, @Nullable String callErrorDescription) {
         //if (alertDialog != null && alertDialog.isShowing()) {
+
+        Log.d(TAG, "handleCancel: activeInviteCount = " + activeInviteCount);
 
         // Sometimes we get more than one invite from Twilio for the same call.
         // When this happens the second invite will not be answered, which causes
@@ -546,6 +550,7 @@ public class FlutterTwilioVoicePlugin implements FlutterPlugin, MethodChannel.Me
             outgoingToNumber = null;
             activeCallInvite = null;
         }
+        activeInviteCount = 0;
     }
 
     @Override
