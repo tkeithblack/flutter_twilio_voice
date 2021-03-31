@@ -194,6 +194,12 @@ class FlutterTwilioVoice {
     return _channel.invokeMethod('isOnCall', <String, dynamic>{});
   }
 
+  Future<void> replayCallInvite() {
+    if (Platform.isIOS) {
+      return _channel.invokeMethod('replayCallInvite', <String, dynamic>{});
+    }
+  }
+
   // Legacy Methods replaced by new version ---------
   String getFrom() {
     // replaced by getter fromNumber
@@ -294,8 +300,10 @@ class FlutterTwilioVoice {
     switch (state) {
       case "call_invite":
         _setCallInfoFromParams(params: params);
+        var replay = params['replay'];
         callStartedOn = DateTime.now().millisecondsSinceEpoch;
-        callInvite(customParameters: params["customParameters"]);
+        callInvite(
+            customParameters: params["customParameters"], replay: replay);
         return CallState.call_invite;
       case "call_invite_canceled":
         _setCallInfoFromParams(params: params);
@@ -421,7 +429,7 @@ class FlutterTwilioVoice {
   }
 
   // Notification methods that can be overridden
-  void callInvite({Map<dynamic, dynamic> customParameters}) {}
+  void callInvite({Map<dynamic, dynamic> customParameters, bool replay}) {}
   void callInviteCancel({String errorMessage}) {}
   void callDidStartRinging() {}
   void callDidConnect() {}
