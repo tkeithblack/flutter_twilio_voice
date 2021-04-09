@@ -12,6 +12,7 @@ enum CallState {
   connect_failed,
   call_invite,
   call_invite_canceled,
+  call_reject,
   call_ended,
   unhold,
   hold,
@@ -310,6 +311,10 @@ class FlutterTwilioVoice {
         callStartedOn = DateTime.now().millisecondsSinceEpoch;
         callInviteCancel(errorMessage: params["error"]);
         return CallState.call_invite_canceled;
+      case "call_reject":
+        _setCallInfoFromParams(params: params);
+        callReject(customParameters: params["customParameters"]);
+        return CallState.call_reject;
       case "ringing":
         _setCallInfoFromParams(params: params);
         callStartedOn = DateTime.now().millisecondsSinceEpoch;
@@ -431,6 +436,7 @@ class FlutterTwilioVoice {
   // Notification methods that can be overridden
   void callInvite({Map<dynamic, dynamic> customParameters, bool replay}) {}
   void callInviteCancel({String errorMessage}) {}
+  void callReject({Map<dynamic, dynamic> customParameters}) {}
   void callDidStartRinging() {}
   void callDidConnect() {}
   void callReconnected() {}

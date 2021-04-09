@@ -12,6 +12,7 @@ enum CallState: String {
     case reconnected            = "reconnected"
     case call_invite            = "call_invite"
     case call_invite_canceled   = "call_invite_canceled"
+    case call_reject            = "call_reject"
     case connectFailed          = "connect_failed"
     case call_ended             = "call_ended"
     case unhold                 = "unhold"
@@ -561,6 +562,8 @@ public class SwiftFlutterTwilioVoicePlugin: NSObject, FlutterPlugin,  FlutterStr
         }
 
     public func call(_ call: TVOCall, didDisconnectWithError error: Error?) {
+            NSLog("didDisconnectWithError, error: \(String(describing: error?.localizedDescription))")
+        
             var callInfo = callToJson(call: call);
             callInfo.updateValue(CallState.call_ended.rawValue, forKey: "event")
             if let error = error {
@@ -695,15 +698,34 @@ public class SwiftFlutterTwilioVoicePlugin: NSObject, FlutterPlugin,  FlutterStr
                 return
             }
 
-            if (self.callInvite != nil) {
+            if let ci = self.callInvite {
                 NSLog("provider:performEndCallAction: rejecting call")
-                self.callInvite?.reject()
+                                
+                var inviteInfo:[String : Any] = ["event": CallState.call_reject.rawValue, "from": ci.from ?? "", "to": ci.to, "direction": CallDirection.incoming.rawValue, "sid": ci.callSid];
+                if let parameters = ci.customParameters {
+                    inviteInfo.updateValue(parameters, forKey: "customParameters")
+                }
+                sendPhoneCallEvents(json: inviteInfo)
+                
+                ci.reject()
                 //self.callInvite = nil
                 //self.call = nil
                 action.fulfill()
                 return
             }
         }
+    
+    
+    // TODO: remove this after debugging!!!
+    public func provider(_ provider: CXProvider,
+                  execute transaction: CXTransaction) -> Bool {
+        
+        print("CXTransaction.actions:")
+        for action in transaction.actions {
+            print(action)
+        }
+        return false;
+    }
 
         public func provider(_ provider: CXProvider, perform action: CXSetHeldCallAction) {
             NSLog("provider:performSetHeldAction:")
@@ -788,11 +810,8 @@ public class SwiftFlutterTwilioVoicePlugin: NSObject, FlutterPlugin,  FlutterStr
             let transaction = CXTransaction(action: endCallAction)
 
             callKitCallController.request(transaction) { error in
-                if let error = error {
-                    self.sendErrorEvent(message: "End Call Failed: \(error.localizedDescription).")
-                } else {
-                    self.sendPhoneCallEvents(json: ["event": CallState.call_ended.rawValue])
-                }
+                // Doing nothing here as this causes a call to:
+                // call(_ call: TVOCall, didDisconnectWithError error: Error?)
             }
         }
 

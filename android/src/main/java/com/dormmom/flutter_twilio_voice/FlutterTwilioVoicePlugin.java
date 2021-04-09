@@ -53,7 +53,7 @@ import java.util.Map;
 import com.google.firebase.messaging.RemoteMessage;
 
 enum CallState {
-    ringing, connected, reconnecting, reconnected, connect_failed, call_invite, call_invite_canceled, call_ended,
+    ringing, connected, reconnecting, reconnected, connect_failed, call_invite, call_invite_canceled, call_reject, call_ended,
     unhold, hold, unmute, mute, speaker_on, speaker_off, audio_route_change
 }
 
@@ -687,7 +687,7 @@ public class FlutterTwilioVoicePlugin implements FlutterPlugin, MethodChannel.Me
             @Override
             public void onDisconnected(Call call, CallException error) {
                 audioSwitch.deactivate();
-                Log.d(TAG, "Disconnected");
+                Log.d(TAG, "onDisconnected");
                 if (error != null) {
                     String message = String.format("Call Error: %d, %s", error.getErrorCode(), error.getMessage());
                     Log.e(TAG, message);
