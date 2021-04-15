@@ -195,9 +195,9 @@ class FlutterTwilioVoice {
     return _channel.invokeMethod('isOnCall', <String, dynamic>{});
   }
 
-  Future<void> replayCallInvite() {
+  Future<void> replayCallConnection() {
     if (Platform.isIOS) {
-      return _channel.invokeMethod('replayCallInvite', <String, dynamic>{});
+      return _channel.invokeMethod('replayCallConnection', <String, dynamic>{});
     }
   }
 

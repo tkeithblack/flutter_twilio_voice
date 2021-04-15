@@ -223,20 +223,21 @@ public class SwiftFlutterTwilioVoicePlugin: NSObject, FlutterPlugin,  FlutterStr
             //self.toggleUIState(isEnabled: false, showCallControl: false)
         }
     }
-    else if flutterCall.method == "replayCallInvite"
+    else if flutterCall.method == "replayCallConnection"
     {
         // This method was created for situations where the Flutter App is not
         // running when the inital CallInvite comes through, but CallKit has already
         // answered the call. In the Flutter app at load time we will call
         // isOnCall() to see if we were launched in response to an incoming call.
-        // If so then the Flutter app can call replayCallInvite() which will
+        // If so then the Flutter app can call replayCallConnection() which will
         // trigger the call invite event, this allowing the flutter app to
         // properly diplay it's active call UI.
         //
         // When the replayed callInvite is sent an extra parameter will be set 'replay: true'
-        if let ci = callInvite {
+        if let ci = callInvite, let call = self.call, call.state == TVOCallState.connected {
             NSLog("Replay CallInvite invoked")
             buildAndSendInviteEvent(ci: ci, replay: true)
+            sendCallDidConnectEvent(call: call)
         }
     }
     result(true)
@@ -244,6 +245,7 @@ public class SwiftFlutterTwilioVoicePlugin: NSObject, FlutterPlugin,  FlutterStr
 
     var connected : Bool {
         get {
+            NSLog("*** TwilioTrace get connected: call = \(String(describing: call)), call.state = \(String(describing: call?.state.rawValue)) ")
             if let call = self.call, call.state == TVOCallState.connected {
                 return true
             }
@@ -479,6 +481,12 @@ public class SwiftFlutterTwilioVoicePlugin: NSObject, FlutterPlugin,  FlutterStr
         sendPhoneCallEvents(json: inviteInfo)
     }
 
+    private func sendCallDidConnectEvent(call: TVOCall) {
+        var callInfo = callToJson(call: call);
+        callInfo.updateValue(CallState.connected.rawValue, forKey: "event")
+        sendPhoneCallEvents(json: callInfo)
+    }
+    
     private func updateCallerIdFromContacts(number:String? , name:String? ) {
         guard let num = number else {
             return
@@ -522,9 +530,7 @@ public class SwiftFlutterTwilioVoicePlugin: NSObject, FlutterPlugin,  FlutterStr
         }
 
     public func callDidConnect(_ call: TVOCall) {
-        var callInfo = callToJson(call: call);
-        callInfo.updateValue(CallState.connected.rawValue, forKey: "event")
-        sendPhoneCallEvents(json: callInfo)
+        sendCallDidConnectEvent(call: call)
         
         self.callKitCompletionCallback!(true)
         toggleAudioRoute(toSpeaker: false)

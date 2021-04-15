@@ -247,23 +247,29 @@ public class FlutterTwilioVoicePlugin implements FlutterPlugin, MethodChannel.Me
 
             showWhenInBackground();
 
-            final HashMap<String, Object> params = new HashMap<>();
-            params.put("event", CallState.call_invite.name());
-            params.put("from", callInvite.getFrom());
-            params.put("to", callInvite.getTo());
-            params.put("sid", callInvite.getCallSid());
-            params.put("direction", CallDirection.incoming.name());
-
-            Object customParameters = callInvite.getCustomParameters();
-            if (customParameters != null)
-                params.put("customParameters",  customParameters);
-
+            HashMap<String, Object> params = paramsFromCallInvite(callInvite, CallState.call_invite);
             sendPhoneCallEvents(params);
 
             SoundPoolManager.getInstance(context).playRinging();
         } else {
             Log.d(TAG, "Skipping callInvite, already handling another invite. New Invite:" + callInvite);
         }
+    }
+
+    private HashMap<String, Object> paramsFromCallInvite(CallInvite callInvite, CallState event) {
+
+        final HashMap<String, Object> params = new HashMap<>();
+        params.put("event", event.name());
+        params.put("from", callInvite.getFrom());
+        params.put("to", callInvite.getTo());
+        params.put("sid", callInvite.getCallSid());
+        params.put("direction", CallDirection.incoming.name());
+
+        Object customParameters = callInvite.getCustomParameters();
+        if (customParameters != null)
+            params.put("customParameters",  customParameters);
+
+        return params;
     }
 
     private void handleCancel(@NonNull CancelledCallInvite cancelledCallInvite, @Nullable String callErrorDescription) {
@@ -558,6 +564,10 @@ public class FlutterTwilioVoicePlugin implements FlutterPlugin, MethodChannel.Me
     private void reject() {
         SoundPoolManager.getInstance(context).stopRinging();
         if (activeCallInvite != null) {
+
+            HashMap<String, Object> params = paramsFromCallInvite(activeCallInvite, CallState.call_reject);
+            sendPhoneCallEvents(params);
+
             activeCallInvite.reject(context);
             activeCall = null;
             outgoingFromNumber = null;
