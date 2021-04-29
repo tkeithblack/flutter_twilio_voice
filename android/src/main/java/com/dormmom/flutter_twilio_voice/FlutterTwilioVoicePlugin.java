@@ -250,7 +250,7 @@ public class FlutterTwilioVoicePlugin implements FlutterPlugin, MethodChannel.Me
             HashMap<String, Object> params = paramsFromCallInvite(callInvite, CallState.call_invite);
             sendPhoneCallEvents(params);
 
-            SoundPoolManager.getInstance(context).playRinging();
+            SoundManager.getInstance(context).playRinging();
         } else {
             Log.d(TAG, "Skipping callInvite, already handling another invite. New Invite:" + callInvite);
         }
@@ -297,7 +297,7 @@ public class FlutterTwilioVoicePlugin implements FlutterPlugin, MethodChannel.Me
             sendPhoneCallEvents(params);
 
             callOutgoing = false;
-            SoundPoolManager.getInstance(context).stopRinging();
+            SoundManager.getInstance(context).stopRinging();
 
             activeCallInvite = null;
         }
@@ -555,14 +555,14 @@ public class FlutterTwilioVoicePlugin implements FlutterPlugin, MethodChannel.Me
      */
     private void answer() {
         Log.d(TAG, "Answering call");
-        SoundPoolManager.getInstance(context).stopRinging();
+        SoundManager.getInstance(context).stopRinging();
         activeCallInvite.accept(context, callListener);
         notificationManager.cancel(activeCallNotificationId);
         activeCallInvite = null;
     }
 
     private void reject() {
-        SoundPoolManager.getInstance(context).stopRinging();
+        SoundManager.getInstance(context).stopRinging();
         if (activeCallInvite != null) {
 
             HashMap<String, Object> params = paramsFromCallInvite(activeCallInvite, CallState.call_reject);
