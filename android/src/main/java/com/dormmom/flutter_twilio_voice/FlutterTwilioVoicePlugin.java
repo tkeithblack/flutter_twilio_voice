@@ -53,7 +53,7 @@ import java.util.Map;
 import com.google.firebase.messaging.RemoteMessage;
 
 enum CallState {
-    ringing, connected, reconnecting, reconnected, connect_failed, call_invite, call_invite_canceled, call_ended,
+    ringing, connected, reconnecting, reconnected, connect_failed, call_invite, call_invite_canceled, call_reject, call_ended,
     unhold, hold, unmute, mute, speaker_on, speaker_off, audio_route_change
 }
 
@@ -192,6 +192,18 @@ public class FlutterTwilioVoicePlugin implements FlutterPlugin, MethodChannel.Me
     //     this.handleIncomingCall(activeCallInvite.getFrom(), activeCallInvite.getTo());
     // }
 
+    void incrementActiveInviteCount() {
+        activeInviteCount++;
+    }
+
+    void decrementActiveInviteCount() {
+        if (activeInviteCount > 0)
+            activeInviteCount--;
+    }
+
+    void resetActiveInviteCount() {
+        activeInviteCount = 0;
+    }
 
     private Date lastInviteTime;
     private final static int CALL_INVITE_STALE_SECONDS = 30;
@@ -214,14 +226,17 @@ public class FlutterTwilioVoicePlugin implements FlutterPlugin, MethodChannel.Me
             long seconds = diff / 1000;
             if (seconds > CALL_INVITE_STALE_SECONDS) {
                 Log.d(TAG, "Last callInvite was " + seconds + "seconds ago, resetting activeInviteCount.");
-                activeInviteCount = 0;
+                resetActiveInviteCount();
             }
         }
         lastInviteTime = new Date();
 
+        Log.d(TAG, "handleIncomingCall: activeInviteCount = " + activeInviteCount);
+
         // Sometimes we get more than one invite from Twilio for the same call.
         // When this happens the we should not process the second invite.
-        if (activeInviteCount++ == 0) {
+        incrementActiveInviteCount();
+        if (activeInviteCount == 1) {
             // TODO: See if we can read callerInfo from getCallerInfo();
 //            CallerInfo callerInfo = activeCallInvite.getCallerInfo();
 
@@ -232,27 +247,35 @@ public class FlutterTwilioVoicePlugin implements FlutterPlugin, MethodChannel.Me
 
             showWhenInBackground();
 
-            final HashMap<String, Object> params = new HashMap<>();
-            params.put("event", CallState.call_invite.name());
-            params.put("from", callInvite.getFrom());
-            params.put("to", callInvite.getTo());
-            params.put("sid", callInvite.getCallSid());
-            params.put("direction", CallDirection.incoming.name());
-
-            Object customParameters = callInvite.getCustomParameters();
-            if (customParameters != null)
-                params.put("customParameters",  customParameters);
-
+            HashMap<String, Object> params = paramsFromCallInvite(callInvite, CallState.call_invite);
             sendPhoneCallEvents(params);
 
-            SoundPoolManager.getInstance(context).playRinging();
+            SoundManager.getInstance(context).playRinging();
         } else {
             Log.d(TAG, "Skipping callInvite, already handling another invite. New Invite:" + callInvite);
         }
     }
 
+    private HashMap<String, Object> paramsFromCallInvite(CallInvite callInvite, CallState event) {
+
+        final HashMap<String, Object> params = new HashMap<>();
+        params.put("event", event.name());
+        params.put("from", callInvite.getFrom());
+        params.put("to", callInvite.getTo());
+        params.put("sid", callInvite.getCallSid());
+        params.put("direction", CallDirection.incoming.name());
+
+        Object customParameters = callInvite.getCustomParameters();
+        if (customParameters != null)
+            params.put("customParameters",  customParameters);
+
+        return params;
+    }
+
     private void handleCancel(@NonNull CancelledCallInvite cancelledCallInvite, @Nullable String callErrorDescription) {
         //if (alertDialog != null && alertDialog.isShowing()) {
+
+        Log.d(TAG, "handleCancel: activeInviteCount = " + activeInviteCount);
 
         // Sometimes we get more than one invite from Twilio for the same call.
         // When this happens the second invite will not be answered, which causes
@@ -260,7 +283,8 @@ public class FlutterTwilioVoicePlugin implements FlutterPlugin, MethodChannel.Me
         // However, we don't want to hangup when there is still an
         // active call. Therefore, do not send the cancel invite message until
         // activeInvite count is == 1.
-        if (activeInviteCount--  == 1) {
+        decrementActiveInviteCount();
+        if (activeInviteCount  == 0) {
             final HashMap<String, Object> params = new HashMap<>();
             params.put("event", CallState.call_invite_canceled.name());
             params.put("from", cancelledCallInvite.getFrom());
@@ -273,7 +297,7 @@ public class FlutterTwilioVoicePlugin implements FlutterPlugin, MethodChannel.Me
             sendPhoneCallEvents(params);
 
             callOutgoing = false;
-            SoundPoolManager.getInstance(context).stopRinging();
+            SoundManager.getInstance(context).stopRinging();
 
             activeCallInvite = null;
         }
@@ -531,21 +555,26 @@ public class FlutterTwilioVoicePlugin implements FlutterPlugin, MethodChannel.Me
      */
     private void answer() {
         Log.d(TAG, "Answering call");
-        SoundPoolManager.getInstance(context).stopRinging();
+        SoundManager.getInstance(context).stopRinging();
         activeCallInvite.accept(context, callListener);
         notificationManager.cancel(activeCallNotificationId);
         activeCallInvite = null;
     }
 
     private void reject() {
-        SoundPoolManager.getInstance(context).stopRinging();
+        SoundManager.getInstance(context).stopRinging();
         if (activeCallInvite != null) {
+
+            HashMap<String, Object> params = paramsFromCallInvite(activeCallInvite, CallState.call_reject);
+            sendPhoneCallEvents(params);
+
             activeCallInvite.reject(context);
             activeCall = null;
             outgoingFromNumber = null;
             outgoingToNumber = null;
             activeCallInvite = null;
         }
+        resetActiveInviteCount();
     }
 
     @Override
@@ -629,7 +658,7 @@ public class FlutterTwilioVoicePlugin implements FlutterPlugin, MethodChannel.Me
                 if (error != null)
                     params.put("error", error.getLocalizedMessage());
                 sendPhoneCallEvents(params);
-                activeInviteCount = 0;
+                resetActiveInviteCount();
             }
 
             @Override
@@ -668,7 +697,7 @@ public class FlutterTwilioVoicePlugin implements FlutterPlugin, MethodChannel.Me
             @Override
             public void onDisconnected(Call call, CallException error) {
                 audioSwitch.deactivate();
-                Log.d(TAG, "Disconnected");
+                Log.d(TAG, "onDisconnected");
                 if (error != null) {
                     String message = String.format("Call Error: %d, %s", error.getErrorCode(), error.getMessage());
                     Log.e(TAG, message);
@@ -682,7 +711,7 @@ public class FlutterTwilioVoicePlugin implements FlutterPlugin, MethodChannel.Me
                 sendPhoneCallEvents(params);
                 outgoingFromNumber = null;
                 outgoingToNumber = null;
-                activeInviteCount = 0;
+                resetActiveInviteCount();
             }
         };
 
@@ -694,7 +723,7 @@ public class FlutterTwilioVoicePlugin implements FlutterPlugin, MethodChannel.Me
             activeCall = null;
             outgoingFromNumber = null;
             outgoingToNumber = null;
-            activeInviteCount = 0;
+            resetActiveInviteCount();
 
             final HashMap<String, Object> params = new HashMap<>();
             params.put("event", CallState.call_ended.name());

@@ -2,4 +2,5 @@
   package="com.dormmom.flutter_twilio_voice">
 
     <uses-permission android:name="android.permission.DISABLE_KEYGUARD" />
+    <uses-permission android:name="android.permission.VIBRATE" />
 </manifest>

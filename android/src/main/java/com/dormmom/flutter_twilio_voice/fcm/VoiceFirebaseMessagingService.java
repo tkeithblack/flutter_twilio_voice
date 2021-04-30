@@ -148,6 +148,8 @@ public class VoiceFirebaseMessagingService extends Service {
         if (callException != null && callException.getErrorCode() != CallException.EXCEPTION_CALL_CANCELLED)
             intent.putExtra(Constants.CANCELLED_CALL_INVITE_ERROR, callException.getLocalizedMessage());
 
+        Log.d(TAG, "handleCanceledCallInvite intent = ");
+        Log.d(TAG, String.valueOf(intent));
         startService(intent);
     }
 }
