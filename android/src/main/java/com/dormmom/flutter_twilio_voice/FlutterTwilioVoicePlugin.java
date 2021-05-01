@@ -195,6 +195,7 @@ public class FlutterTwilioVoicePlugin implements FlutterPlugin, MethodChannel.Me
 
     void incrementActiveInviteCount() {
         activeInviteCount++;
+        Log.d(TAG, "Invite Count = " + activeInviteCount);
     }
 
     void decrementActiveInviteCount() {
@@ -559,8 +560,6 @@ public class FlutterTwilioVoicePlugin implements FlutterPlugin, MethodChannel.Me
         SoundManager.getInstance(context).stopRinging();
         if (activeCallInvite != null) {
             activeCallInvite.accept(context, callListener);
-//            notificationManager.cancel(activeCallNotificationId);
-            activeCallInvite = null;
         }
     }
 
@@ -714,6 +713,7 @@ public class FlutterTwilioVoicePlugin implements FlutterPlugin, MethodChannel.Me
                 sendPhoneCallEvents(params);
                 outgoingFromNumber = null;
                 outgoingToNumber = null;
+                activeCallInvite = null;
                 resetActiveInviteCount();
             }
         };
@@ -726,6 +726,7 @@ public class FlutterTwilioVoicePlugin implements FlutterPlugin, MethodChannel.Me
             activeCall = null;
             outgoingFromNumber = null;
             outgoingToNumber = null;
+            activeCallInvite = null;
             resetActiveInviteCount();
 
             final HashMap<String, Object> params = new HashMap<>();
