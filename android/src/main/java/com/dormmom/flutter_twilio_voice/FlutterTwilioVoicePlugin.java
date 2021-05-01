@@ -179,6 +179,7 @@ public class FlutterTwilioVoicePlugin implements FlutterPlugin, MethodChannel.Me
                 break;
             case Constants.ACTION_ACCEPT:
                 activeCallNotificationId = intent.getIntExtra(Constants.INCOMING_CALL_NOTIFICATION_ID, 0);
+                activeCallInvite = intent.getParcelableExtra(Constants.INCOMING_CALL_INVITE);
                 answer();
                 break;
             default:
@@ -556,9 +557,11 @@ public class FlutterTwilioVoicePlugin implements FlutterPlugin, MethodChannel.Me
     private void answer() {
         Log.d(TAG, "Answering call");
         SoundManager.getInstance(context).stopRinging();
-        activeCallInvite.accept(context, callListener);
-        notificationManager.cancel(activeCallNotificationId);
-        activeCallInvite = null;
+        if (activeCallInvite != null) {
+            activeCallInvite.accept(context, callListener);
+//            notificationManager.cancel(activeCallNotificationId);
+            activeCallInvite = null;
+        }
     }
 
     private void reject() {
