@@ -27,6 +27,7 @@ import android.content.Intent;
 import android.content.IntentFilter;
 import android.content.pm.PackageManager;
 import android.media.AudioManager;
+import android.os.Build;
 import android.os.PowerManager;
 import android.util.Log;
 import android.view.Window;
@@ -162,7 +163,7 @@ public class FlutterTwilioVoicePlugin implements FlutterPlugin, MethodChannel.Me
             case Constants.ACTION_INCOMING_CALL:
                 int notificationId = intent.getIntExtra(Constants.INCOMING_CALL_NOTIFICATION_ID, 0);
                 CallInvite callInvite = intent.getParcelableExtra(Constants.INCOMING_CALL_INVITE);
-                handleIncomingCall(callInvite, notificationId);
+                handleIncomingCall(callInvite, notificationId, false);
                 break;
             case Constants.ACTION_INCOMING_CALL_NOTIFICATION:
                 activeCallNotificationId = intent.getIntExtra(Constants.INCOMING_CALL_NOTIFICATION_ID, 0);
@@ -189,10 +190,6 @@ public class FlutterTwilioVoicePlugin implements FlutterPlugin, MethodChannel.Me
        }
     }
 
-    // private void showIncomingCallDialog() {
-    //     this.handleIncomingCall(activeCallInvite.getFrom(), activeCallInvite.getTo());
-    // }
-
     void incrementActiveInviteCount() {
         activeInviteCount++;
         Log.d(TAG, "Invite Count = " + activeInviteCount);
@@ -210,7 +207,7 @@ public class FlutterTwilioVoicePlugin implements FlutterPlugin, MethodChannel.Me
     private Date lastInviteTime;
     private final static int CALL_INVITE_STALE_SECONDS = 30;
 
-    private void handleIncomingCall(@NonNull CallInvite callInvite, int notificationId) {
+    private void handleIncomingCall(@NonNull CallInvite callInvite, int notificationId, boolean replay) {
 
         // Below we have logic to prevent multiple incoming callInvites. This section
         // checks to make sure the activeInviteCount isn't an old value, if so it will now
@@ -250,12 +247,24 @@ public class FlutterTwilioVoicePlugin implements FlutterPlugin, MethodChannel.Me
             showWhenInBackground();
 
             HashMap<String, Object> params = paramsFromCallInvite(callInvite, CallState.call_invite);
+            if (replay) {
+                params.put("replay", true);
+            } else {
+                SoundManager.getInstance(context).playRinging();
+            }
             sendPhoneCallEvents(params);
-
-            SoundManager.getInstance(context).playRinging();
         } else {
             Log.d(TAG, "Skipping callInvite, already handling another invite. New Invite:" + callInvite);
         }
+    }
+
+    private void handleCallConnect(Call call) {
+        Log.d(TAG, "Connected");
+        activeCall = call;
+
+        HashMap<String, Object> params = callToParams (call);
+        params.put("event", CallState.connected.name());
+        sendPhoneCallEvents(params);
     }
 
     private HashMap<String, Object> paramsFromCallInvite(CallInvite callInvite, CallState event) {
@@ -266,6 +275,11 @@ public class FlutterTwilioVoicePlugin implements FlutterPlugin, MethodChannel.Me
         params.put("to", callInvite.getTo());
         params.put("sid", callInvite.getCallSid());
         params.put("direction", CallDirection.incoming.name());
+
+        if (IncomingCallNotificationService.pluginDisplayedAnswerScreen) {
+            // This parameter lets the app know the incoming call screen is handled.
+            params.put("pluginDisplayedAnswerScreen", true);
+        }
 
         Object customParameters = callInvite.getCustomParameters();
         if (customParameters != null)
@@ -540,14 +554,21 @@ public class FlutterTwilioVoicePlugin implements FlutterPlugin, MethodChannel.Me
               .build();
             this.activeCall = Voice.connect(this.activity, connectOptions, this.callListener);
             result.success(true);
-
-//        } else if (call.method.equals("incomingVoipMessage")) {
-//            Log.d(TAG, "incomingVoipMessage");
-//
-//            final HashMap<String, Object> message = call.argument("message");
-//            result.success(handleInviteMessage(message));
-//
-        } else {
+        } else if (call.method.equals("replayCallConnection")) {
+            // This method was created for situations where the Flutter App does not
+            // receive the inital CallInvite. This can occur if the app is in the background
+            // a Notification window answers the call.
+            //
+            // When the replayed callInvite is sent an extra parameter will be set 'replay: true'
+            if (activeCallInvite != null && activeCall != null) {
+                handleIncomingCall(activeCallInvite, activeCallNotificationId , true);
+                handleCallConnect(activeCall);
+                result.success(true);
+                return;
+            }
+            result.success(false);
+        }
+        else {
             result.notImplemented();
         }
     }
@@ -669,12 +690,7 @@ public class FlutterTwilioVoicePlugin implements FlutterPlugin, MethodChannel.Me
                 audioSwitch.activate();
                 queryAndSendAudioDeviceInfo();
 
-                Log.d(TAG, "Connected");
-                activeCall = call;
-
-                HashMap<String, Object> params = callToParams (call);
-                params.put("event", CallState.connected.name());
-                sendPhoneCallEvents(params);
+                handleCallConnect(call);
             }
 
             @Override

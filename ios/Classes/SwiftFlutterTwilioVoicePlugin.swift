@@ -225,13 +225,10 @@ public class SwiftFlutterTwilioVoicePlugin: NSObject, FlutterPlugin,  FlutterStr
     }
     else if flutterCall.method == "replayCallConnection"
     {
-        // This method was created for situations where the Flutter App is not
-        // running when the inital CallInvite comes through, but CallKit has already
-        // answered the call. In the Flutter app at load time we will call
-        // isOnCall() to see if we were launched in response to an incoming call.
-        // If so then the Flutter app can call replayCallConnection() which will
-        // trigger the call invite event, this allowing the flutter app to
-        // properly diplay it's active call UI.
+        // This method was created for situations where the Flutter App does not
+        // receive the inital CallInvite. This can occur if the app is not
+        // running or in the background and CallKit or and Android Notification
+        // answers the call.
         //
         // When the replayed callInvite is sent an extra parameter will be set 'replay: true'
         if let ci = callInvite, let call = self.call, call.state == TVOCallState.connected {
@@ -471,7 +468,7 @@ public class SwiftFlutterTwilioVoicePlugin: NSObject, FlutterPlugin,  FlutterStr
     
     private func buildAndSendInviteEvent(ci: TVOCallInvite, replay:Bool=false) {
 
-        var inviteInfo:[String : Any] = ["event": CallState.call_invite.rawValue, "from": inviteParamCallerId ?? "Voice Bot", "to": ci.to, "direction": CallDirection.incoming.rawValue, "sid": ci.callSid];
+        var inviteInfo:[String : Any] = ["event": CallState.call_invite.rawValue, "from": inviteParamCallerId ?? "Voice Bot", "to": ci.to, "direction": CallDirection.incoming.rawValue, "sid": ci.callSid, "pluginDisplayedAnswerScreen": true];
         if let parameters = ci.customParameters {
             inviteInfo.updateValue(parameters, forKey: "customParameters")
         }

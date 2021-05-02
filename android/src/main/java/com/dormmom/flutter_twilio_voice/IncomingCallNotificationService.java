@@ -26,6 +26,7 @@ import com.twilio.voice.CallerInfo;
 public class IncomingCallNotificationService extends Service {
 
     private static final String TAG = IncomingCallNotificationService.class.getSimpleName();
+    public static boolean pluginDisplayedAnswerScreen = false;
 
     @Override
     public int onStartCommand(Intent intent, int flags, int startId) {
@@ -186,9 +187,6 @@ public class IncomingCallNotificationService extends Service {
     private void sendCallInviteToActivity(CallInvite callInvite, int notificationId) {
         Log.d(TAG, "inside sendCallInviteToActivity(CallInvite callInvite, int notificationId= " + notificationId + ")");
         Log.d(TAG, "Build.VERSION.SDK_INT = " + Build.VERSION.SDK_INT);
-        if (Build.VERSION.SDK_INT >= 29 && !isAppVisible()) {
-            return;
-        }
         Intent intent = new Intent();
         intent.setAction(Constants.ACTION_INCOMING_CALL);
         intent.putExtra(Constants.INCOMING_CALL_NOTIFICATION_ID, notificationId);
@@ -213,15 +211,13 @@ public class IncomingCallNotificationService extends Service {
 
         Log.i(TAG, "handleIncomingCall -  CallInvite = " + callInvite);
 
-        // If the device is Android 9.0 (Version 29 - VERSION_CODES.O) or greater then
-        // we will NOT be able to pop the app to the foreground due to new security settings.
-        // Therefore, for these versions we will popup a Notification window that allows
-        // the user to select answer or decline.
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && !isAppVisible()) {
+        if (pluginWillDisplayAnswerScreen()) {
             Log.i(TAG, "Android Version " + Build.VERSION.SDK_INT + ". Displaying Popup Notificaiton for incoming call.");
+            pluginDisplayedAnswerScreen = true;
             setCallInProgressNotification(callInvite, notificationId);
         } {
             Log.i(TAG, "Android Version " + Build.VERSION.SDK_INT + ". Launching App to foreground");
+            pluginDisplayedAnswerScreen = false;
             sendCallInviteToActivity(callInvite, notificationId);
         }
 
@@ -248,12 +244,23 @@ public class IncomingCallNotificationService extends Service {
         }
     }
 
-    private boolean isAppVisible() {
+    private static boolean isAppVisible() {
         return ProcessLifecycleOwner
           .get()
           .getLifecycle()
           .getCurrentState()
           .isAtLeast(Lifecycle.State.STARTED);
+    }
+
+    private static boolean pluginWillDisplayAnswerScreen() {
+        // If the device is Android 9.0 (Version 29 - VERSION_CODES.O) or greater then
+        // we will NOT be able to pop the app to the foreground due to new security settings.
+        // Therefore, for these versions we will popup a Notification window that allows
+        // the user to select answer or decline.
+
+        boolean result =  Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && !isAppVisible();
+        Log.d(TAG, "pluginWillDisplayAnswerScreen = " + result);
+        return result;
     }
 
     public static String getApplicationName(Context context) {
