@@ -2,6 +2,7 @@ package com.dormmom.flutter_twilio_voice;
 
 import android.annotation.TargetApi;
 import android.app.Notification;
+import android.app.Notification.Action;
 import android.app.NotificationChannel;
 import android.app.NotificationManager;
 import android.app.PendingIntent;
@@ -9,6 +10,7 @@ import android.app.Service;
 import android.content.Context;
 import android.content.Intent;
 import android.content.pm.ApplicationInfo;
+import android.graphics.Bitmap;
 import android.graphics.Color;
 import android.os.Build;
 import android.os.Bundle;
@@ -21,7 +23,10 @@ import androidx.lifecycle.ProcessLifecycleOwner;
 import androidx.localbroadcastmanager.content.LocalBroadcastManager;
 
 import com.twilio.voice.CallInvite;
-import com.twilio.voice.CallerInfo;
+
+import java.util.Map;
+
+import static android.app.Notification.*;
 
 public class IncomingCallNotificationService extends Service {
 
@@ -80,11 +85,12 @@ public class IncomingCallNotificationService extends Service {
         extras.putString(Constants.CALL_SID_KEY, callInvite.getCallSid());
 
         Context context = getApplicationContext();
-        String appName = getApplicationName(context);
+        String appName = getApplicationName(context) + " Incoming Call";
+        String notificationText = getCallNotificationText(callInvite);
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             Log.d(TAG, "calling buildNotification() - Build.VERSION.SDK_INT (" + Build.VERSION.SDK_INT +  ") >= Build.VERSION_CODES.O ("  + Build.VERSION_CODES.O +  ")");
 
-            return buildNotification(appName, callInvite.getFrom() + " is calling.",
+            return buildNotification(context, appName, notificationText,
               pendingIntent,
               extras,
               callInvite,
@@ -96,7 +102,7 @@ public class IncomingCallNotificationService extends Service {
             return new NotificationCompat.Builder(this)
                     .setSmallIcon(R.drawable.ic_call_end_white_24dp)
                     .setContentTitle(getApplicationName(context))
-                    .setContentText(callInvite.getFrom() + " is calling.")
+                    .setContentText(notificationText)
                     .setAutoCancel(true)
                     .setExtras(extras)
                     .setContentIntent(pendingIntent)
@@ -115,7 +121,7 @@ public class IncomingCallNotificationService extends Service {
      * @return the builder
      */
     @TargetApi(Build.VERSION_CODES.O)
-    private Notification buildNotification(String title, String text, PendingIntent pendingIntent, Bundle extras,
+    private Notification buildNotification(Context context, String title, String text, PendingIntent pendingIntent, Bundle extras,
       final CallInvite callInvite,
       int notificationId,
       String channelId) {
@@ -132,21 +138,51 @@ public class IncomingCallNotificationService extends Service {
         acceptIntent.putExtra(Constants.INCOMING_CALL_INVITE, callInvite);
         acceptIntent.putExtra(Constants.INCOMING_CALL_NOTIFICATION_ID, notificationId);
         PendingIntent piAcceptIntent = PendingIntent.getService(getApplicationContext(), 0, acceptIntent, PendingIntent.FLAG_UPDATE_CURRENT);
+        Notification.Action rejectAction = new Action.Builder(android.R.drawable.ic_menu_delete,getString(R.string.decline),piRejectIntent).build();
+        Notification.Action answerAction = new Notification.Action.Builder(android.R.drawable.ic_menu_call, getString(R.string.answer), piAcceptIntent).build();
 
         Notification.Builder builder =
-          new Notification.Builder(getApplicationContext(), channelId)
-            .setSmallIcon(R.drawable.ic_call_end_white_24dp)
-            .setContentTitle(title)
-            .setContentText(text)
-            .setCategory(Notification.CATEGORY_CALL)
-            .setFullScreenIntent(pendingIntent, true)
-            .setExtras(extras)
-            .setAutoCancel(true)
-            .addAction(android.R.drawable.ic_menu_delete, getString(R.string.decline), piRejectIntent)
-            .addAction(android.R.drawable.ic_menu_call, getString(R.string.answer), piAcceptIntent)
-            .setFullScreenIntent(pendingIntent, true);
+          new Notification.Builder(context, channelId)
+                  .setSmallIcon(R.drawable.app_icon)
+                  .setContentTitle(title)
+                  .setContentText(text)
+                  .setCategory(CATEGORY_CALL)
+                  .setSound(null)
+                  .setExtras(extras)
+//                  .setColorized(true)
+//                  .setColor(2255607) // 2251217
+                  .setAutoCancel(true)
+                  .addAction(rejectAction)
+                  .addAction(answerAction)
+                  .setFullScreenIntent(pendingIntent, true);
+
+        SoundManager.getInstance(context).playRinging();
 
         return builder.build();
+    }
+
+    private String getCallNotificationText(CallInvite callInvite) {
+
+        // Twilio allows sending custom parameters. The code below checks to see if there is a
+        // parameter called callerId, if so we'll use that number. This allows us to show the
+        // actual from callerId rather than the 'client:ID' notation that may be present when
+        // calling from a server/mobile device.
+        // If this is not provided we'll use the standard callInvite.from.
+        // We will also pull the name of the PhoneNumber if provided.
+
+        String result = callInvite.getFrom();
+        Map<String, String> parameters = callInvite.getCustomParameters();
+
+        if (parameters != null) {
+            String number = parameters.get("callerId");
+            String name = parameters.get("lynkName");
+            String inviteParamCallerId = number != null ? number : callInvite.getFrom();
+            if (name != null && !name.isEmpty()) {
+                inviteParamCallerId += " - " + name;
+            }
+            result = inviteParamCallerId;
+        }
+        return result;
     }
 
     @TargetApi(Build.VERSION_CODES.O)
@@ -161,7 +197,7 @@ public class IncomingCallNotificationService extends Service {
             channelId = Constants.VOICE_CHANNEL_LOW_IMPORTANCE;
         }
         callInviteChannel.setLightColor(Color.GREEN);
-        callInviteChannel.setLockscreenVisibility(Notification.VISIBILITY_PRIVATE);
+        callInviteChannel.setLockscreenVisibility(VISIBILITY_PRIVATE);
         NotificationManager notificationManager = (NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE);
         notificationManager.createNotificationChannel(callInviteChannel);
 
@@ -173,7 +209,7 @@ public class IncomingCallNotificationService extends Service {
 
         endForeground();
         Intent intent = new Intent();
-        intent.setAction(Constants.ACTION_ACCEPT);
+        intent.setAction(Constants.ACTION_ANSWERED);
         intent.putExtra(Constants.INCOMING_CALL_NOTIFICATION_ID, notificationId);
         intent.putExtra(Constants.INCOMING_CALL_INVITE, callInvite);
         intent.addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP);
@@ -199,6 +235,7 @@ public class IncomingCallNotificationService extends Service {
     private void reject(CallInvite callInvite) {
         Log.d(TAG, "Inside reject(CallInvite callInvite)");
         endForeground();
+        SoundManager.getInstance(getApplicationContext()).stopRinging();
         callInvite.reject(getApplicationContext());
     }
 
@@ -211,11 +248,11 @@ public class IncomingCallNotificationService extends Service {
 
         Log.i(TAG, "handleIncomingCall -  CallInvite = " + callInvite);
 
-        if (pluginWillDisplayAnswerScreen()) {
+        if (shouldDisplayAnswerNotification()) {
             Log.i(TAG, "Android Version " + Build.VERSION.SDK_INT + ". Displaying Popup Notificaiton for incoming call.");
             pluginDisplayedAnswerScreen = true;
             setCallInProgressNotification(callInvite, notificationId);
-        } {
+        } else {
             Log.i(TAG, "Android Version " + Build.VERSION.SDK_INT + ". Launching App to foreground");
             pluginDisplayedAnswerScreen = false;
             sendCallInviteToActivity(callInvite, notificationId);
@@ -252,13 +289,13 @@ public class IncomingCallNotificationService extends Service {
           .isAtLeast(Lifecycle.State.STARTED);
     }
 
-    private static boolean pluginWillDisplayAnswerScreen() {
+    private static boolean shouldDisplayAnswerNotification() {
         // If the device is Android 9.0 (Version 29 - VERSION_CODES.O) or greater then
         // we will NOT be able to pop the app to the foreground due to new security settings.
         // Therefore, for these versions we will popup a Notification window that allows
         // the user to select answer or decline.
 
-        boolean result =  Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && !isAppVisible();
+        boolean result =  Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q && !isAppVisible();
         Log.d(TAG, "pluginWillDisplayAnswerScreen = " + result);
         return result;
     }
@@ -267,5 +304,11 @@ public class IncomingCallNotificationService extends Service {
         ApplicationInfo applicationInfo = context.getApplicationInfo();
         int stringId = applicationInfo.labelRes;
         return stringId == 0 ? applicationInfo.nonLocalizedLabel.toString() : context.getString(stringId);
+    }
+
+    public static int getApplicationIcon(Context context) {
+        ApplicationInfo applicationInfo = context.getApplicationInfo();
+        int iconId = applicationInfo.icon;
+        return iconId;
     }
 }

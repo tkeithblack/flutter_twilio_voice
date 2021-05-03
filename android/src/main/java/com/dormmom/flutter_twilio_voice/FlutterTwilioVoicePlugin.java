@@ -81,7 +81,6 @@ public class FlutterTwilioVoicePlugin implements FlutterPlugin, MethodChannel.Me
     private VoiceBroadcastReceiver voiceBroadcastReceiver;
 
     private NotificationManager notificationManager;
-    //private SoundPoolManager soundPoolManager;
     private CallInvite activeCallInvite;
     private int activeInviteCount = 0; // Used for handling dup call invites.
     private Call activeCall;
@@ -116,7 +115,6 @@ public class FlutterTwilioVoicePlugin implements FlutterPlugin, MethodChannel.Me
         plugin.eventChannel.setStreamHandler(plugin);
 
         plugin.context = context;
-        //plugin.soundPoolManager = SoundPoolManager.getInstance(context);
 
         plugin.notificationManager = (NotificationManager) context.getSystemService(Context.NOTIFICATION_SERVICE);
         plugin.voiceBroadcastReceiver = new VoiceBroadcastReceiver(plugin);
@@ -178,7 +176,7 @@ public class FlutterTwilioVoicePlugin implements FlutterPlugin, MethodChannel.Me
                     callError = intent.getStringExtra(Constants.CANCELLED_CALL_INVITE_ERROR);
                 handleCancel(cancelledCallInvite, callError);
                 break;
-            case Constants.ACTION_ACCEPT:
+            case Constants.ACTION_ANSWERED:
                 activeCallNotificationId = intent.getIntExtra(Constants.INCOMING_CALL_NOTIFICATION_ID, 0);
                 activeCallInvite = intent.getParcelableExtra(Constants.INCOMING_CALL_INVITE);
                 answer();
