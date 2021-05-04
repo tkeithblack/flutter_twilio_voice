@@ -100,10 +100,12 @@ public class FlutterTwilioVoicePlugin implements FlutterPlugin, MethodChannel.Me
     private String outgoingFromNumber;
     private String outgoingToNumber;
 
+
     @Override
     public void onAttachedToEngine(FlutterPluginBinding flutterPluginBinding) {
         Log.i(TAG, "onAttachedToEngine()");
         register(flutterPluginBinding.getFlutterEngine().getDartExecutor(), this, flutterPluginBinding.getApplicationContext());
+
     }
 
     private static void register(BinaryMessenger messenger, FlutterTwilioVoicePlugin plugin, Context context) {
@@ -576,7 +578,6 @@ public class FlutterTwilioVoicePlugin implements FlutterPlugin, MethodChannel.Me
      */
     private void answer() {
         Log.d(TAG, "Answering call");
-        SoundManager.getInstance(context).stopRinging();
         if (activeCallInvite != null) {
             activeCallInvite.accept(context, callListener);
         }

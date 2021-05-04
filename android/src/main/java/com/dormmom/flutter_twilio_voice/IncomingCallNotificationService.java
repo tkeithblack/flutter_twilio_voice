@@ -2,28 +2,32 @@ package com.dormmom.flutter_twilio_voice;
 
 import android.annotation.TargetApi;
 import android.app.Notification;
-import android.app.Notification.Action;
 import android.app.NotificationChannel;
 import android.app.NotificationManager;
 import android.app.PendingIntent;
 import android.app.Service;
+import android.content.ContentResolver;
 import android.content.Context;
 import android.content.Intent;
 import android.content.pm.ApplicationInfo;
-import android.graphics.Bitmap;
+import android.database.Cursor;
 import android.graphics.Color;
+import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
 import android.os.IBinder;
+import android.provider.ContactsContract;
 import android.util.Log;
 
 import androidx.core.app.NotificationCompat;
+import androidx.core.content.ContextCompat;
 import androidx.lifecycle.Lifecycle;
 import androidx.lifecycle.ProcessLifecycleOwner;
 import androidx.localbroadcastmanager.content.LocalBroadcastManager;
 
 import com.twilio.voice.CallInvite;
 
+import java.util.ArrayList;
 import java.util.Map;
 
 import static android.app.Notification.*;
@@ -87,6 +91,7 @@ public class IncomingCallNotificationService extends Service {
         Context context = getApplicationContext();
         String appName = getApplicationName(context) + " Incoming Call";
         String notificationText = getCallNotificationText(callInvite);
+
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             Log.d(TAG, "calling buildNotification() - Build.VERSION.SDK_INT (" + Build.VERSION.SDK_INT +  ") >= Build.VERSION_CODES.O ("  + Build.VERSION_CODES.O +  ")");
 
@@ -138,25 +143,24 @@ public class IncomingCallNotificationService extends Service {
         acceptIntent.putExtra(Constants.INCOMING_CALL_INVITE, callInvite);
         acceptIntent.putExtra(Constants.INCOMING_CALL_NOTIFICATION_ID, notificationId);
         PendingIntent piAcceptIntent = PendingIntent.getService(getApplicationContext(), 0, acceptIntent, PendingIntent.FLAG_UPDATE_CURRENT);
-        Notification.Action rejectAction = new Action.Builder(android.R.drawable.ic_menu_delete,getString(R.string.decline),piRejectIntent).build();
+        Notification.Action rejectAction = new Notification.Action.Builder(android.R.drawable.ic_menu_delete,getString(R.string.decline),piRejectIntent).build();
         Notification.Action answerAction = new Notification.Action.Builder(android.R.drawable.ic_menu_call, getString(R.string.answer), piAcceptIntent).build();
 
         Notification.Builder builder =
           new Notification.Builder(context, channelId)
-                  .setSmallIcon(R.drawable.app_icon)
+                  .setSmallIcon(R.mipmap.app_icon_white)
+//                  .setColorized(true)
+//                  .setColor(ContextCompat.getColor(context, R.color.design_default_color_primary))
                   .setContentTitle(title)
                   .setContentText(text)
                   .setCategory(CATEGORY_CALL)
+                  .setLights(Color.RED, 3000, 3000)
                   .setSound(null)
                   .setExtras(extras)
-//                  .setColorized(true)
-//                  .setColor(2255607) // 2251217
                   .setAutoCancel(true)
                   .addAction(rejectAction)
                   .addAction(answerAction)
                   .setFullScreenIntent(pendingIntent, true);
-
-        SoundManager.getInstance(context).playRinging();
 
         return builder.build();
     }
@@ -175,10 +179,20 @@ public class IncomingCallNotificationService extends Service {
 
         if (parameters != null) {
             String number = parameters.get("callerId");
+            String displayName = lookupContactNameByPhoneNumber(number);
+            String formattedNumber = formatPhoneNumberForDisplay(number, true);
+            if (displayName == null && formattedNumber != null) {
+                number = formattedNumber;
+                Log.d(TAG, "Contact Formatted Number: " + formattedNumber);
+            }
+            String callerId = displayName != null  ? displayName : number;
+
+            Log.d(TAG, "Contact Display Name: " + displayName);
+
             String name = parameters.get("lynkName");
-            String inviteParamCallerId = number != null ? number : callInvite.getFrom();
+            String inviteParamCallerId = callerId != null ? callerId : callInvite.getFrom();
             if (name != null && !name.isEmpty()) {
-                inviteParamCallerId += " - " + name;
+                inviteParamCallerId += " calling " + name;
             }
             result = inviteParamCallerId;
         }
@@ -207,6 +221,7 @@ public class IncomingCallNotificationService extends Service {
     private void accept(CallInvite callInvite, int notificationId) {
         Log.d(TAG, "Inside accept(CallInvite callInvite, int notificationId)");
 
+        SoundManager.getInstance(getApplicationContext()).stopRinging();
         endForeground();
         Intent intent = new Intent();
         intent.setAction(Constants.ACTION_ANSWERED);
@@ -279,6 +294,7 @@ public class IncomingCallNotificationService extends Service {
             Log.i(TAG, "setCallInProgressNotification - app is NOT visible.");
             startForeground(notificationId, createNotification(callInvite, notificationId, NotificationManager.IMPORTANCE_HIGH));
         }
+        SoundManager.getInstance(getApplicationContext()).playRinging();
     }
 
     private static boolean isAppVisible() {
@@ -311,4 +327,92 @@ public class IncomingCallNotificationService extends Service {
         int iconId = applicationInfo.icon;
         return iconId;
     }
+
+    private String lookupContactNameByPhoneNumber(String searchNumber) {
+
+        try {
+            Uri uri = Uri.withAppendedPath(ContactsContract.PhoneLookup.CONTENT_FILTER_URI, Uri.encode(searchNumber));
+
+            ArrayList<String> nameList = new ArrayList<>();
+            String[] projection = new String[]{ContactsContract.PhoneLookup.HAS_PHONE_NUMBER, ContactsContract.PhoneLookup.DISPLAY_NAME, ContactsContract.PhoneLookup.NUMBER};
+
+            ContentResolver cr = getContentResolver();
+            Cursor cur = cr.query(uri, projection, null, null, null);
+
+            String displayName = null;
+            if ((cur != null ? cur.getCount() : 0) > 0) {
+                cur.moveToNext();
+                String number = cur.getString(cur.getColumnIndex(
+                        ContactsContract.PhoneLookup.NUMBER));
+                String name = cur.getString(cur.getColumnIndex(
+                        ContactsContract.PhoneLookup.DISPLAY_NAME));
+                displayName = name != null && !name.isEmpty() ? name : null;
+                Log.d(TAG, "Found PhoneNumber: " + number + ", Name: " + name);
+                if (cur != null) {
+                    cur.close();
+                }
+            }
+            return displayName;
+        }
+        catch (Exception e) {
+                Log.d("*** ERROR: Phone-Number Lookup: ", e.getMessage());
+                return null;
+        }
+
+    }
+
+    String formatPhoneNumberForDisplay(String phoneNumber, boolean hideLeadingOne) {
+        // Remove any character that is not a number
+
+        try {
+            final String numbersOnly = phoneNumber.replaceAll("[^\\d.]", "");
+
+            int length = numbersOnly.length();
+            boolean hasLeadingOne = numbersOnly.charAt(0) == '1';
+
+            // Check for supported phone number length
+            if (!(length <= 10 || (length == 11 && hasLeadingOne))) {
+                Log.e(TAG,"failed length test, length = $length");
+                return null;
+            }
+
+            boolean hasAreaCode = (length >= 10);
+            int sourceIndex = 0;
+
+            // Leading 1
+            String leadingOne = "";
+            if (hasLeadingOne) {
+                leadingOne = "1 ";
+                sourceIndex += 1;
+            }
+
+            // Area code
+            String areaCode = "";
+            if (hasAreaCode) {
+                int areaCodeLength = 3;
+                areaCode = "(" + numbersOnly.substring(sourceIndex, areaCodeLength + sourceIndex) + ") ";
+                sourceIndex += areaCodeLength;
+            }
+
+            // Prefix, 3 characters
+            int prefixLength = 3;
+            String prefix = numbersOnly.substring(sourceIndex, prefixLength + sourceIndex);
+            sourceIndex += prefixLength;
+
+            // Suffix, 4 characters
+            int suffixLength = 4;
+            String suffix = numbersOnly.substring(sourceIndex, suffixLength + sourceIndex);
+
+            return (hideLeadingOne ? "" : leadingOne) +
+                    areaCode +
+                    prefix +
+                    '-' +
+                    suffix;
+        } catch (Exception e) {
+            Log.e(TAG, "** ERROR: failed formatting phone number '$phoneNumber' for display.");
+            return null;
+        }
+    }
+
+
 }
