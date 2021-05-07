@@ -27,7 +27,6 @@ import android.content.Intent;
 import android.content.IntentFilter;
 import android.content.pm.PackageManager;
 import android.media.AudioManager;
-import android.os.Build;
 import android.os.PowerManager;
 import android.util.Log;
 import android.view.Window;
@@ -122,8 +121,6 @@ public class FlutterTwilioVoicePlugin implements FlutterPlugin, MethodChannel.Me
         plugin.voiceBroadcastReceiver = new VoiceBroadcastReceiver(plugin);
         plugin.audioSwitch = new AudioSwitch(context);
 
-        plugin.registerReceiver();
-
         /*
          * Needed for setting/abandoning audio focus during a call
          */
@@ -138,19 +135,6 @@ public class FlutterTwilioVoicePlugin implements FlutterPlugin, MethodChannel.Me
         Voice.setLogLevel(LogLevel.INFO);
         Log.i(TAG, "TwilioVoice Version: " + Voice.getVersion());
         Log.i(TAG, "TwilioVoice Log Level: " + Voice.getLogLevel());
-    }
-
-    /** Plugin registration. */
-    public static void registerWith(PluginRegistry.Registrar registrar) {
-        // Detect if we've been launched in background
-        if (registrar.activity() == null) {
-            return;
-        }
-
-        final FlutterTwilioVoicePlugin instance = new FlutterTwilioVoicePlugin();
-        instance.activity = registrar.activity();
-        register(registrar.messenger(), instance, registrar.context());
-        registrar.addNewIntentListener(instance);
     }
 
     private void handleIncomingCallIntent(Intent intent) {
@@ -182,6 +166,14 @@ public class FlutterTwilioVoicePlugin implements FlutterPlugin, MethodChannel.Me
                 activeCallNotificationId = intent.getIntExtra(Constants.INCOMING_CALL_NOTIFICATION_ID, 0);
                 activeCallInvite = intent.getParcelableExtra(Constants.INCOMING_CALL_INVITE);
                 answer();
+                break;
+            case Constants.ACTION_DECLINED:
+                activeCallNotificationId = intent.getIntExtra(Constants.INCOMING_CALL_NOTIFICATION_ID, 0);
+                activeCallInvite = intent.getParcelableExtra(Constants.INCOMING_CALL_INVITE);
+                reject();
+                break;
+            case Constants.ACTION_APP_TO_FOREGROUND:
+                showWhenInBackground();
                 break;
             default:
                 Log.e(TAG, "handleIncomingCallIntent action NOT handled. " + action);
@@ -243,8 +235,7 @@ public class FlutterTwilioVoicePlugin implements FlutterPlugin, MethodChannel.Me
             activeCallNotificationId = notificationId;
 
             Log.d(TAG, "Processing call callInvite: " + callInvite);
-
-            showWhenInBackground();
+//            showWhenInBackground();
 
             HashMap<String, Object> params = paramsFromCallInvite(callInvite, CallState.call_invite);
             if (replay) {
@@ -320,6 +311,8 @@ public class FlutterTwilioVoicePlugin implements FlutterPlugin, MethodChannel.Me
     }
 
     private void showWhenInBackground() {
+        if (activity == null) return;
+
         // These flags ensure that the activity can be launched when the screen is locked.
         Window window = activity.getWindow();
 
@@ -341,13 +334,16 @@ public class FlutterTwilioVoicePlugin implements FlutterPlugin, MethodChannel.Me
 
     private void registerReceiver() {
         if (!isReceiverRegistered) {
+            Log.d(TAG, "registerReceiver");
             IntentFilter intentFilter = new IntentFilter();
             intentFilter.addAction(Constants.ACTION_CALLINVITE);
             intentFilter.addAction(Constants.ACTION_INCOMING_CALL);
             intentFilter.addAction(Constants.ACTION_INCOMING_CALL_NOTIFICATION);
             intentFilter.addAction(Constants.ACTION_CANCEL_CALL);
             intentFilter.addAction(Constants.ACTION_FCM_TOKEN);
-            LocalBroadcastManager.getInstance(this.activity).registerReceiver(
+            intentFilter.addAction(Constants.ACTION_ANSWERED);
+            intentFilter.addAction(Constants.ACTION_DECLINED);
+                LocalBroadcastManager.getInstance(this.activity).registerReceiver(
               voiceBroadcastReceiver, intentFilter);
             isReceiverRegistered = true;
 
@@ -384,7 +380,6 @@ public class FlutterTwilioVoicePlugin implements FlutterPlugin, MethodChannel.Me
             @Override
             public void onUnregistered(String accessToken, String fcmToken) {
                 Log.d(TAG, "Successfully registered FCM " + fcmToken);
-                Log.d(TAG, "Successfully registered FCM " + fcmToken);
             }
 
             @Override
@@ -408,29 +403,53 @@ public class FlutterTwilioVoicePlugin implements FlutterPlugin, MethodChannel.Me
             String action = intent.getAction();
             Log.d(TAG, "Received broadcast for action " + action);
 
-            // This message was grabbed from the firebase_messaging plugin broadcast.
-            if (action != null && action.equals(Constants.ACTION_CALLINVITE)) {
-                RemoteMessage remoteMessage = intent.getParcelableExtra(Constants.EXTRA_CALLINVITE_MESSAGE);
+            if (action != null)
+                switch (action) {
+                    case Constants.ACTION_INCOMING_CALL:
+                    case Constants.ACTION_CANCEL_CALL:
+                    case Constants.ACTION_REJECT:
+                    case Constants.ACTION_ACCEPT:
+                    case Constants.ACTION_ANSWERED:
+                    case Constants.ACTION_DECLINED:
 
-                Log.d(TAG, "handling FirebaseNotificaiton message. RemoteMessage: " + remoteMessage);
+                        /*
+                         * Handle the incoming or cancelled call invite
+                         */
+                        plugin.handleIncomingCallIntent(intent);
+                        break;
+                    default:
+                        Log.d(TAG, "Received broadcast for other action " + action);
+                        break;
 
-                Intent vmsIntent = new Intent(context , VoiceFirebaseMessagingService.class);
-                vmsIntent.setAction(action);
-
-                vmsIntent.putExtra(Constants.EXTRA_CALLINVITE_MESSAGE, remoteMessage);
-                context.startService(vmsIntent);
-                return;
-            }
-
-            if (action != null && (action.equals(Constants.ACTION_INCOMING_CALL) || action.equals(Constants.ACTION_CANCEL_CALL))) {
-                /*
-                 * Handle the incoming or cancelled call invite
-                 */
-                Log.d(TAG, "inside onReceive if calling handleIncomingCallIntent()");
-
-                plugin.handleIncomingCallIntent(intent);
-            }
+                }
         }
+//        @Override
+//        public void onReceive(Context context, Intent intent) {
+//            String action = intent.getAction();
+//            Log.d(TAG, "Received broadcast for action " + action);
+//
+//            // This message was grabbed from the firebase_messaging plugin broadcast.
+//            if (action != null && action.equals(Constants.ACTION_CALLINVITE)) {
+//                RemoteMessage remoteMessage = intent.getParcelableExtra(Constants.EXTRA_CALLINVITE_MESSAGE);
+//
+//                Log.d(TAG, "handling FirebaseNotificaiton message. RemoteMessage: " + remoteMessage);
+//
+//                Intent vmsIntent = new Intent(context , VoiceFirebaseMessagingService.class);
+//                vmsIntent.setAction(action);
+//
+//                vmsIntent.putExtra(Constants.EXTRA_CALLINVITE_MESSAGE, remoteMessage);
+//                context.startService(vmsIntent);
+//                return;
+//            }
+//
+//            if (action != null && (action.equals(Constants.ACTION_INCOMING_CALL) || action.equals(Constants.ACTION_CANCEL_CALL))) {
+//                /*
+//                 * Handle the incoming or cancelled call invite
+//                 */
+//                Log.d(TAG, "inside onReceive if calling handleIncomingCallIntent()");
+//
+//                plugin.handleIncomingCallIntent(intent);
+//            }
     }
 
     /*
@@ -578,6 +597,7 @@ public class FlutterTwilioVoicePlugin implements FlutterPlugin, MethodChannel.Me
      */
     private void answer() {
         Log.d(TAG, "Answering call");
+        SoundManager.getInstance(context).stopRinging();
         if (activeCallInvite != null) {
             activeCallInvite.accept(context, callListener);
         }
@@ -586,7 +606,6 @@ public class FlutterTwilioVoicePlugin implements FlutterPlugin, MethodChannel.Me
     private void reject() {
         SoundManager.getInstance(context).stopRinging();
         if (activeCallInvite != null) {
-
             HashMap<String, Object> params = paramsFromCallInvite(activeCallInvite, CallState.call_reject);
             sendPhoneCallEvents(params);
 

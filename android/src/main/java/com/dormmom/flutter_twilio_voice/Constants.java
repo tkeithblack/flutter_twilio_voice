@@ -12,6 +12,8 @@ public class Constants {
     public static final String ACTION_ACCEPT = "ACTION_ACCEPT";
     public static final String ACTION_REJECT = "ACTION_REJECT";
     public static final String ACTION_ANSWERED = "ACTION_ANSWERED";
+    public static final String ACTION_DECLINED = "ACTION_DECLINE";
+    public static final String ACTION_APP_TO_FOREGROUND = "ACTION_APP_TO_FOREGROUND";
     public static final String ACTION_INCOMING_CALL_NOTIFICATION = "ACTION_INCOMING_CALL_NOTIFICATION";
     public static final String ACTION_INCOMING_CALL = "ACTION_INCOMING_CALL";
     public static final String ACTION_CANCEL_CALL = "ACTION_CANCEL_CALL";

@@ -1,6 +1,7 @@
 package com.dormmom.flutter_twilio_voice;
 
 import android.annotation.TargetApi;
+import android.app.ActivityManager;
 import android.app.Notification;
 import android.app.NotificationChannel;
 import android.app.NotificationManager;
@@ -20,7 +21,6 @@ import android.provider.ContactsContract;
 import android.util.Log;
 
 import androidx.core.app.NotificationCompat;
-import androidx.core.content.ContextCompat;
 import androidx.lifecycle.Lifecycle;
 import androidx.lifecycle.ProcessLifecycleOwner;
 import androidx.localbroadcastmanager.content.LocalBroadcastManager;
@@ -28,6 +28,7 @@ import androidx.localbroadcastmanager.content.LocalBroadcastManager;
 import com.twilio.voice.CallInvite;
 
 import java.util.ArrayList;
+import java.util.List;
 import java.util.Map;
 
 import static android.app.Notification.*;
@@ -54,7 +55,7 @@ public class IncomingCallNotificationService extends Service {
                 accept(callInvite, notificationId);
                 break;
             case Constants.ACTION_REJECT:
-                reject(callInvite);
+                reject(callInvite, notificationId);
                 break;
             case Constants.ACTION_CANCEL_CALL:
                 handleCancelledCall(intent);
@@ -75,12 +76,15 @@ public class IncomingCallNotificationService extends Service {
         Log.d(TAG, "Inside createNotification()");
 
         Intent intent = new Intent();
+//        Intent intent = new Intent(this, FlutterTwilioVoicePlugin.class);
+
         intent.setAction(Constants.ACTION_INCOMING_CALL_NOTIFICATION);
         intent.putExtra(Constants.INCOMING_CALL_NOTIFICATION_ID, notificationId);
         intent.putExtra(Constants.INCOMING_CALL_INVITE, callInvite);
         intent.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP);
-        PendingIntent pendingIntent =
-          PendingIntent.getBroadcast(this, notificationId, intent, PendingIntent.FLAG_UPDATE_CURRENT);
+//        PendingIntent pendingIntent =
+//          PendingIntent.getBroadcast(this, notificationId, intent, PendingIntent.FLAG_UPDATE_CURRENT);
+        PendingIntent pendingIntent = PendingIntent.getActivity(this, notificationId, intent, PendingIntent.FLAG_UPDATE_CURRENT);
         /*
          * Pass the notification id and call sid to use as an identifier to cancel the
          * notification later
@@ -221,15 +225,31 @@ public class IncomingCallNotificationService extends Service {
     private void accept(CallInvite callInvite, int notificationId) {
         Log.d(TAG, "Inside accept(CallInvite callInvite, int notificationId)");
 
-        SoundManager.getInstance(getApplicationContext()).stopRinging();
+        boolean running = isAppRunning(getApplicationContext(), "com.dormmom.flutter_twilio_voice");
+        Log.d(TAG, "*** IS APP RUNNING = " + running);
+
         endForeground();
+        bringAppToForeground();
         Intent intent = new Intent();
         intent.setAction(Constants.ACTION_ANSWERED);
         intent.putExtra(Constants.INCOMING_CALL_NOTIFICATION_ID, notificationId);
         intent.putExtra(Constants.INCOMING_CALL_INVITE, callInvite);
         intent.addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP);
         intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-        this.startActivity(intent);
+        LocalBroadcastManager.getInstance(this).sendBroadcast(intent);
+    }
+
+    private void reject(CallInvite callInvite, int notificationId) {
+        Log.d(TAG, "Inside reject(CallInvite callInvite)");
+        endForeground();
+
+        Intent intent = new Intent();
+        intent.setAction(Constants.ACTION_DECLINED);
+        intent.putExtra(Constants.INCOMING_CALL_NOTIFICATION_ID, notificationId);
+        intent.putExtra(Constants.INCOMING_CALL_INVITE, callInvite);
+//        intent.addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP);
+//        intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+        LocalBroadcastManager.getInstance(this).sendBroadcast(intent);
     }
 
     /*
@@ -242,16 +262,11 @@ public class IncomingCallNotificationService extends Service {
         intent.setAction(Constants.ACTION_INCOMING_CALL);
         intent.putExtra(Constants.INCOMING_CALL_NOTIFICATION_ID, notificationId);
         intent.putExtra(Constants.INCOMING_CALL_INVITE, callInvite);
-        intent.addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP);
-        intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-        this.startActivity(intent);
-    }
-
-    private void reject(CallInvite callInvite) {
-        Log.d(TAG, "Inside reject(CallInvite callInvite)");
-        endForeground();
-        SoundManager.getInstance(getApplicationContext()).stopRinging();
-        callInvite.reject(getApplicationContext());
+        // TODO: Maybe set these flags below if app should display incoming.
+//        intent.addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP);
+//        intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+        LocalBroadcastManager.getInstance(this).sendBroadcast(intent);
+//        this.startActivity(intent);
     }
 
     private void handleCancelledCall(Intent intent) {
@@ -267,9 +282,11 @@ public class IncomingCallNotificationService extends Service {
             Log.i(TAG, "Android Version " + Build.VERSION.SDK_INT + ". Displaying Popup Notificaiton for incoming call.");
             pluginDisplayedAnswerScreen = true;
             setCallInProgressNotification(callInvite, notificationId);
+            sendCallInviteToActivity(callInvite, notificationId);
         } else {
             Log.i(TAG, "Android Version " + Build.VERSION.SDK_INT + ". Launching App to foreground");
             pluginDisplayedAnswerScreen = false;
+            bringAppToForeground();
             sendCallInviteToActivity(callInvite, notificationId);
         }
 
@@ -294,7 +311,16 @@ public class IncomingCallNotificationService extends Service {
             Log.i(TAG, "setCallInProgressNotification - app is NOT visible.");
             startForeground(notificationId, createNotification(callInvite, notificationId, NotificationManager.IMPORTANCE_HIGH));
         }
-        SoundManager.getInstance(getApplicationContext()).playRinging();
+    }
+
+    private void bringAppToForeground() {
+        Log.d(TAG, "Inside wakePlugin()");
+
+        Intent intent = new Intent();
+        intent.setAction(Constants.ACTION_APP_TO_FOREGROUND);
+        intent.addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP);
+        intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+        this.startActivity(intent);
     }
 
     private static boolean isAppVisible() {
@@ -311,7 +337,7 @@ public class IncomingCallNotificationService extends Service {
         // Therefore, for these versions we will popup a Notification window that allows
         // the user to select answer or decline.
 
-        boolean result =  Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q && !isAppVisible();
+        boolean result =  Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && !isAppVisible();
         Log.d(TAG, "pluginWillDisplayAnswerScreen = " + result);
         return result;
     }
@@ -414,5 +440,19 @@ public class IncomingCallNotificationService extends Service {
         }
     }
 
+    public static boolean isAppRunning(final Context context, final String packageName) {
+//        final ActivityManager activityManager = (ActivityManager) context.getSystemService(Context.ACTIVITY_SERVICE);
+        final ActivityManager activityManager = (ActivityManager) context.getSystemService(Context.ACTIVITY_SERVICE);
+        final List<ActivityManager.RunningAppProcessInfo> procInfos = activityManager.getRunningAppProcesses();
+        if (procInfos != null)
+        {
+            for (final ActivityManager.RunningAppProcessInfo processInfo : procInfos) {
+                if (processInfo.processName.equals(packageName)) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
 
 }

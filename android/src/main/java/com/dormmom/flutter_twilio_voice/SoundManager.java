@@ -41,6 +41,7 @@ public class SoundManager {
     }
 
     public void playRinging() {
+        Log.d(TAG, "SoundManager.playRinging()");
         Uri ringToneUri = RingtoneManager.getActualDefaultRingtoneUri(appContext, RingtoneManager.TYPE_RINGTONE);
         ringTone = RingtoneManager.getRingtone(appContext, ringToneUri);
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
@@ -54,6 +55,7 @@ public class SoundManager {
     }
 
     public void stopRinging() {
+        Log.d(TAG, "SoundManager.stopRinging()");
         stopVibrator();
         if (ringTone != null && ringTone.isPlaying()) {
             ringTone.stop();
