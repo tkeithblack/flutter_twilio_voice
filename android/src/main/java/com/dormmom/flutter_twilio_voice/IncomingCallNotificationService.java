@@ -25,9 +25,11 @@ import androidx.lifecycle.Lifecycle;
 import androidx.lifecycle.ProcessLifecycleOwner;
 import androidx.localbroadcastmanager.content.LocalBroadcastManager;
 
+import com.twilio.voice.Call;
 import com.twilio.voice.CallInvite;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -37,6 +39,7 @@ public class IncomingCallNotificationService extends Service {
 
     private static final String TAG = IncomingCallNotificationService.class.getSimpleName();
     public static boolean pluginDisplayedAnswerScreen = false;
+    Call.Listener callListener = new CallListener().callListener();
 
     @Override
     public int onStartCommand(Intent intent, int flags, int startId) {
@@ -230,17 +233,29 @@ public class IncomingCallNotificationService extends Service {
 
         endForeground();
         bringAppToForeground();
-        Intent intent = new Intent();
-        intent.setAction(Constants.ACTION_ANSWERED);
-        intent.putExtra(Constants.INCOMING_CALL_NOTIFICATION_ID, notificationId);
-        intent.putExtra(Constants.INCOMING_CALL_INVITE, callInvite);
-        intent.addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP);
-        intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-        LocalBroadcastManager.getInstance(this).sendBroadcast(intent);
+
+        answer(callInvite);
+
+//        Intent intent = new Intent();
+//        intent.setAction(Constants.ACTION_ANSWERED);
+//        intent.putExtra(Constants.INCOMING_CALL_NOTIFICATION_ID, notificationId);
+//        intent.putExtra(Constants.INCOMING_CALL_INVITE, callInvite);
+//        intent.addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP);
+//        intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+//        LocalBroadcastManager.getInstance(this).sendBroadcast(intent);
+    }
+
+    private void answer(CallInvite callInvite) {
+        Log.d(TAG, "Answering call");
+        SoundManager.getInstance(getApplicationContext()).stopRinging();
+        if (callInvite != null) {
+            callInvite.accept(getApplicationContext(), callListener);
+        }
     }
 
     private void reject(CallInvite callInvite, int notificationId) {
         Log.d(TAG, "Inside reject(CallInvite callInvite)");
+        SoundManager.getInstance(getApplicationContext()).stopRinging();
         endForeground();
 
         Intent intent = new Intent();
@@ -250,6 +265,8 @@ public class IncomingCallNotificationService extends Service {
 //        intent.addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP);
 //        intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
         LocalBroadcastManager.getInstance(this).sendBroadcast(intent);
+
+        callInvite.reject(getApplicationContext());
     }
 
     /*
