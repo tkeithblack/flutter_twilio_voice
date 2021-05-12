@@ -1,0 +1,312 @@
+package com.dormmom.flutter_twilio_voice;
+
+import androidx.annotation.NonNull;
+
+import com.twilio.audioswitch.AudioDevice;
+import com.twilio.voice.Call;
+import com.twilio.voice.CallException;
+import com.twilio.audioswitch.AudioSwitch;
+import com.twilio.voice.CallInvite;
+
+import java.util.ArrayList;
+import java.util.Date;
+import java.util.HashMap;
+import java.util.List;
+
+import android.content.Context;
+import android.util.Log;
+
+import org.jetbrains.annotations.NotNull;
+
+import kotlin.Unit;
+
+// The purpose of this class is to encapsulate those items that are needed by
+// both FlutterTwilioVoicePlugin and IncomingCallNotificationService.
+// Normally FlutterTwilioVoicePlugin is instantiated first when the app is launched.
+// However, if there is an incoming call when the app is not running the service
+// IncomingCallNotificationService is launched first. As call invites, connections, etc.
+// are processed by the IncomingCallNotificationService, all call messages are processed by
+// Call.Listener(), which normally sends them on to the Flutter app. However, if the app is
+// not yet started then FlutterTwilioVoicePlugin is not yet created.
+//
+// This solution moves Call.Listener() and other resources such as audioSwitch processing
+// to this Singleton. This way these resources are available even if FlutterTwilioVoicePlugin is not.
+// As soon as FlutterTwilioVoicePlugin is instantiated it registers with
+// TwilioSingleton.registerPlugin() and at that time the singleton will begin forwarding
+// all call progress on to the App via FlutterTwilioVoicePlugin.
+
+public class TwilioSingleton {
+
+    private static TwilioSingleton instance;
+    private FlutterTwilioVoicePlugin twilioPlugin = null;
+    private final Context appContext;
+    private final Call.Listener callListener;
+
+    // Shared members
+    CallInvite activeCallInvite;
+    int activeCallNotificationId;
+    AudioSwitch audioSwitch;
+    Call activeCall;
+
+    private TwilioSingleton(Context context) {
+        // AudioManager audio settings for adjusting the volume
+        appContext = context;
+        callListener = createCallListener();
+        startAudioSwitchListener();
+    }
+
+
+    private static final String TAG = "TwilioSingleton";
+    public void registerPlugin(FlutterTwilioVoicePlugin plugin) {
+        Log.d(TAG,"registerPlugin");
+        twilioPlugin = plugin;
+    }
+
+    public void unregisterPlugin() {
+        Log.d(TAG,"UN-registerPlugin");
+        twilioPlugin = null;
+    }
+
+    public static TwilioSingleton getInstance(Context context) {
+        if (instance == null) {
+            instance = new TwilioSingleton(context);
+        }
+        return instance;
+    }
+
+    public Call.Listener getCallListener() {
+        return callListener;
+    }
+    private Call.Listener createCallListener() {
+        return new Call.Listener() {
+            /*
+             * This callback is emitted once before the Call.Listener.onConnected() callback when
+             * the callee is being alerted of a Call. The behavior of this callback is determined by
+             * the answerOnBridge flag provided in the Dial verb of your TwiML application
+             * associated with this client. If the answerOnBridge flag is false, which is the
+             * default, the Call.Listener.onConnected() callback will be emitted immediately after
+             * Call.Listener. FonRinging(). If the answerOnBridge flag is true, this will cause the
+             * call to emit the onConnected callback only after the call is answered.
+             * See answeronbridge for more details on how to use it with the Dial TwiML verb. If the
+             * twiML response contains a Say verb, then the call will emit the
+             * Call.Listener.onConnected callback immediately after Call.Listener.onRinging() is
+             * raised, irrespective of the value of answerOnBridge being set to true or false
+             */
+            @Override
+            public void onRinging(Call call) {
+                Log.d(TAG, "ringing");
+
+                HashMap<String, Object> params = callToParams(call);
+                params.put("event", CallState.ringing.name());
+                sendPhoneCallEvents(params);
+            }
+
+            @Override
+            public void onConnectFailure(@NotNull Call call, @NotNull CallException error) {
+                audioSwitch.deactivate();
+
+                Log.d(TAG, "Connect failure");
+                String message = String.format("Call Error: %d, %s", error.getErrorCode(), error.getMessage());
+                Log.e(TAG, message);
+
+                HashMap<String, Object> params = callToParams(call);
+                params.put("event", CallState.connect_failed.name());
+                params.put("error", error.getLocalizedMessage());
+                sendPhoneCallEvents(params);
+                resetActiveInviteCount();
+            }
+
+            @Override
+            public void onConnected(@NotNull Call call) {
+                Log.d(TAG, "onConnected");
+                audioSwitch.activate();
+                handleCallConnect(call);
+                queryAndSendAudioDeviceInfo();
+            }
+
+            @Override
+            public void onReconnecting(@NonNull Call call, @NonNull CallException callException) {
+                Log.d(TAG, "onReconnecting");
+                HashMap<String, Object> params = callToParams(call);
+                params.put("event", CallState.reconnecting.name());
+                params.put("error", callException.getLocalizedMessage());
+                sendPhoneCallEvents(params);
+            }
+
+            @Override
+            public void onReconnected(@NonNull Call call) {
+                Log.d(TAG, "onReconnected");
+
+                HashMap<String, Object> params = callToParams(call);
+                params.put("event", CallState.reconnected.name());
+                sendPhoneCallEvents(params);
+            }
+
+            @Override
+            public void onDisconnected(Call call, CallException error) {
+                audioSwitch.deactivate();
+
+                Log.d(TAG, "onDisconnected");
+                if (error != null) {
+                    String message = String.format("Call Error: %d, %s", error.getErrorCode(), error.getMessage());
+                    Log.e(TAG, message);
+                }
+
+                HashMap<String, Object> params = callToParams(call);
+                params.put("event", CallState.call_ended.name());
+                if (error != null)
+                    params.put("error", error.getLocalizedMessage());
+
+                sendPhoneCallEvents(params);
+                resetActiveInviteCount();
+                if (twilioPlugin != null) {
+                    twilioPlugin.outgoingFromNumber = null;
+                    twilioPlugin.outgoingToNumber = null;
+                }
+            }
+        };
+    }
+
+    void handleCallConnect(Call call) {
+        Log.d(TAG, "Connected");
+        activeCall = call;
+
+        HashMap<String, Object> params = callToParams (call);
+        params.put("event", CallState.connected.name());
+        sendPhoneCallEvents(params);
+    }
+
+    private void sendPhoneCallEvents(HashMap<String, Object> params) {
+        if (twilioPlugin != null)
+            twilioPlugin.sendPhoneCallEvents(params);
+    }
+
+    private HashMap<String, Object> callToParams(Call call) {
+        if (twilioPlugin != null) {
+            return twilioPlugin.callToParams(call);
+        }
+        return new HashMap<>();
+    }
+
+    void queryAndSendAudioDeviceInfo() {
+
+        AudioDevice selectedDevice = audioSwitch.getSelectedAudioDevice();
+        List<AudioDevice> audioDevices = audioSwitch.getAvailableAudioDevices();
+
+        if (twilioPlugin != null)
+            twilioPlugin.sendAudioDeviceInfo(audioDevices, selectedDevice);
+    }
+
+    private void startAudioSwitchListener() {
+        audioSwitch = new AudioSwitch(appContext);
+
+        // This is a callback that is called any time the audio devices change.
+        audioSwitch.start((audioDevices, selectedDevice) -> {
+            Log.i(TAG, "Audio Device Changed. New Device: " + selectedDevice);
+            if (twilioPlugin != null)
+                twilioPlugin.sendAudioDeviceInfo(audioDevices, selectedDevice);
+
+            return Unit.INSTANCE;
+        });
+
+    }
+
+    private Date lastInviteTime;
+    private final static int CALL_INVITE_STALE_SECONDS = 30;
+    int activeInviteCount = 0; // Used for handling dup call invites.
+
+    boolean initiateIncomingCall(@NonNull CallInvite callInvite, int notificationId, boolean replay) {
+
+        // Below we have logic to prevent multiple incoming callInvites. This section
+        // checks to make sure the activeInviteCount isn't an old value, if so it will now
+        // be reset. This prevents us from getting in a situation where we missed an
+        // activeInviteCount reset and can never again receive calls.
+        // NOTE: All of this complicated code is because sometimes Twilio sends us more than
+        // one callInvite.
+        //
+        // TODO: When we begin handling a second incoming call we need to revisit this code.
+        // Currently we 'may' get in a situation where a second call would not be answered for
+        // CALL_INVITE_STALE_SECONDS.
+        if (lastInviteTime != null) {
+            Date now = new Date();
+            long diff = now.getTime() - lastInviteTime.getTime();
+            long seconds = diff / 1000;
+            if (seconds > CALL_INVITE_STALE_SECONDS) {
+                Log.d(TAG, "Last callInvite was " + seconds + "seconds ago, resetting activeInviteCount.");
+                resetActiveInviteCount();
+            }
+        }
+        lastInviteTime = new Date();
+
+        Log.d(TAG, "handleIncomingCall: activeInviteCount = " + activeInviteCount);
+
+        // Sometimes we get more than one invite from Twilio for the same call.
+        // When this happens the we should not process the second invite.
+        incrementActiveInviteCount();
+        if (activeInviteCount == 1) {
+            // TODO: See if we can read callerInfo from getCallerInfo();
+            // First glance this seems to just tell us if caller info is verified:
+            // From the documents:
+            // https://twilio.github.io/twilio-voice-android/docs/latest/com/twilio/voice/CallerInfo.html
+            // public Boolean isVerified()
+            // Returns `true` if the caller has been validated at 'A' level, `false` if the caller has been verified at any lower level or has failed validation. Returns `null` if no caller verification information is available or if stir status value is `null`.
+
+            activeCallInvite = callInvite;
+            activeCallNotificationId = notificationId;
+            SoundManager.getInstance(appContext).playRinging();
+            return true;
+
+        } else {
+            Log.d(TAG, "Skipping callInvite, already handling another invite. New Invite:" + callInvite);
+        }
+        return false;
+    }
+
+    void resetActiveInviteCount() {
+        activeInviteCount = 0;
+    }
+
+    void incrementActiveInviteCount() {
+        activeInviteCount++;
+        Log.d(TAG, "Invite Count = " + activeInviteCount);
+    }
+
+    void decrementActiveInviteCount() {
+        if (activeInviteCount > 0)
+            activeInviteCount--;
+    }
+
+    /*
+     * Show the current available audio devices.
+     */
+    private void showAudioDevices() {
+        AudioDevice selectedDevice = audioSwitch.getSelectedAudioDevice();
+        List<AudioDevice> availableAudioDevices = audioSwitch.getAvailableAudioDevices();
+
+        if (selectedDevice != null) {
+            int selectedDeviceIndex = availableAudioDevices.indexOf(selectedDevice);
+
+            AudioDevice currentDevice = audioSwitch.getSelectedAudioDevice();
+            Log.i(TAG, "Selected Device: " + currentDevice);
+
+            ArrayList<AudioDevice> audioDevices = new ArrayList<>();
+
+            for (AudioDevice a : availableAudioDevices) {
+                Log.i(TAG, "Available Device: " + a.getName());
+                audioDevices.add(a);
+            }
+            for (AudioDevice a : audioDevices) {
+                if (!a.equals(currentDevice)) {
+                    audioSwitch.selectDevice(a);
+                    Log.i(TAG, "Switched from " + currentDevice.getName() + " to " + a.getName());
+                    break;
+                }
+            }
+            ArrayList<String> audioDeviceNames = new ArrayList<>();
+            for (AudioDevice a : audioDevices) {
+                audioDeviceNames.add(a.getName());
+            }
+        }
+    }
+}
+

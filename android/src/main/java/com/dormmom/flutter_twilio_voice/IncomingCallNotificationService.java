@@ -39,7 +39,12 @@ public class IncomingCallNotificationService extends Service {
 
     private static final String TAG = IncomingCallNotificationService.class.getSimpleName();
     public static boolean pluginDisplayedAnswerScreen = false;
-    Call.Listener callListener = new CallListener().callListener();
+//    Call.Listener callListener = new CallListener().callListener();
+
+
+    TwilioSingleton twSingleton() {
+        return TwilioSingleton.getInstance(getApplicationContext());
+    }
 
     @Override
     public int onStartCommand(Intent intent, int flags, int startId) {
@@ -231,10 +236,11 @@ public class IncomingCallNotificationService extends Service {
         boolean running = isAppRunning(getApplicationContext(), "com.dormmom.flutter_twilio_voice");
         Log.d(TAG, "*** IS APP RUNNING = " + running);
 
+        answer(callInvite);
+
         endForeground();
         bringAppToForeground();
 
-        answer(callInvite);
 
 //        Intent intent = new Intent();
 //        intent.setAction(Constants.ACTION_ANSWERED);
@@ -249,7 +255,7 @@ public class IncomingCallNotificationService extends Service {
         Log.d(TAG, "Answering call");
         SoundManager.getInstance(getApplicationContext()).stopRinging();
         if (callInvite != null) {
-            callInvite.accept(getApplicationContext(), callListener);
+            callInvite.accept(getApplicationContext(), twSingleton().getCallListener());
         }
     }
 
@@ -295,24 +301,19 @@ public class IncomingCallNotificationService extends Service {
 
         Log.i(TAG, "handleIncomingCall -  CallInvite = " + callInvite);
 
-        if (shouldDisplayAnswerNotification()) {
-            Log.i(TAG, "Android Version " + Build.VERSION.SDK_INT + ". Displaying Popup Notificaiton for incoming call.");
-            pluginDisplayedAnswerScreen = true;
-            setCallInProgressNotification(callInvite, notificationId);
-            sendCallInviteToActivity(callInvite, notificationId);
-        } else {
-            Log.i(TAG, "Android Version " + Build.VERSION.SDK_INT + ". Launching App to foreground");
-            pluginDisplayedAnswerScreen = false;
-            bringAppToForeground();
-            sendCallInviteToActivity(callInvite, notificationId);
+        if (twSingleton().initiateIncomingCall(callInvite,notificationId,false)) {
+            if (shouldDisplayAnswerNotification()) {
+                Log.i(TAG, "Android Version " + Build.VERSION.SDK_INT + ". Displaying Popup Notificaiton for incoming call.");
+                pluginDisplayedAnswerScreen = true;
+                setCallInProgressNotification(callInvite, notificationId);
+//                sendCallInviteToActivity(callInvite, notificationId);
+            } else {
+                Log.i(TAG, "Android Version " + Build.VERSION.SDK_INT + ". Launching App to foreground");
+                pluginDisplayedAnswerScreen = false;
+                bringAppToForeground();
+                sendCallInviteToActivity(callInvite, notificationId);
+            }
         }
-
-        // TODO: Look at callInvite.getCallerInfo().
-        // First glance this seems to just tell us if caller info is verified:
-        // From the documents:
-        // https://twilio.github.io/twilio-voice-android/docs/latest/com/twilio/voice/CallerInfo.html
-        // public Boolean isVerified()
-        // Returns `true` if the caller has been validated at 'A' level, `false` if the caller has been verified at any lower level or has failed validation. Returns `null` if no caller verification information is available or if stir status value is `null`.
     }
 
     private void endForeground() {
