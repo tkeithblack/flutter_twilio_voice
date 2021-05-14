@@ -25,11 +25,9 @@ import androidx.lifecycle.Lifecycle;
 import androidx.lifecycle.ProcessLifecycleOwner;
 import androidx.localbroadcastmanager.content.LocalBroadcastManager;
 
-import com.twilio.voice.Call;
 import com.twilio.voice.CallInvite;
 
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -39,8 +37,6 @@ public class IncomingCallNotificationService extends Service {
 
     private static final String TAG = IncomingCallNotificationService.class.getSimpleName();
     public static boolean pluginDisplayedAnswerScreen = false;
-//    Call.Listener callListener = new CallListener().callListener();
-
 
     TwilioSingleton twSingleton() {
         return TwilioSingleton.getInstance(getApplicationContext());
@@ -84,14 +80,10 @@ public class IncomingCallNotificationService extends Service {
         Log.d(TAG, "Inside createNotification()");
 
         Intent intent = new Intent();
-//        Intent intent = new Intent(this, FlutterTwilioVoicePlugin.class);
-
         intent.setAction(Constants.ACTION_INCOMING_CALL_NOTIFICATION);
         intent.putExtra(Constants.INCOMING_CALL_NOTIFICATION_ID, notificationId);
         intent.putExtra(Constants.INCOMING_CALL_INVITE, callInvite);
         intent.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP);
-//        PendingIntent pendingIntent =
-//          PendingIntent.getBroadcast(this, notificationId, intent, PendingIntent.FLAG_UPDATE_CURRENT);
         PendingIntent pendingIntent = PendingIntent.getActivity(this, notificationId, intent, PendingIntent.FLAG_UPDATE_CURRENT);
         /*
          * Pass the notification id and call sid to use as an identifier to cancel the
@@ -178,7 +170,6 @@ public class IncomingCallNotificationService extends Service {
     }
 
     private String getCallNotificationText(CallInvite callInvite) {
-
         // Twilio allows sending custom parameters. The code below checks to see if there is a
         // parameter called callerId, if so we'll use that number. This allows us to show the
         // actual from callerId rather than the 'client:ID' notation that may be present when
@@ -186,30 +177,41 @@ public class IncomingCallNotificationService extends Service {
         // If this is not provided we'll use the standard callInvite.from.
         // We will also pull the name of the PhoneNumber if provided.
 
-        String result = callInvite.getFrom();
-        Map<String, String> parameters = callInvite.getCustomParameters();
+        String callerId = twSingleton().getCallerId(callInvite);
+        String name = TwilioSingleton.getLineName(callInvite);
 
-        if (parameters != null) {
-            String number = parameters.get("callerId");
-            String displayName = lookupContactNameByPhoneNumber(number);
-            String formattedNumber = formatPhoneNumberForDisplay(number, true);
-            if (displayName == null && formattedNumber != null) {
-                number = formattedNumber;
-                Log.d(TAG, "Contact Formatted Number: " + formattedNumber);
-            }
-            String callerId = displayName != null  ? displayName : number;
-
-            Log.d(TAG, "Contact Display Name: " + displayName);
-
-            String name = parameters.get("lynkName");
-            String inviteParamCallerId = callerId != null ? callerId : callInvite.getFrom();
-            if (name != null && !name.isEmpty()) {
-                inviteParamCallerId += " calling " + name;
-            }
-            result = inviteParamCallerId;
+        if (name != null && !name.isEmpty()) {
+            callerId += " calling " + name;
         }
-        return result;
+        return callerId;
     }
+
+//    private String getCallerId(CallInvite callInvite) {
+//
+//        String result = callInvite.getFrom();
+//        Map<String, String> parameters = callInvite.getCustomParameters();
+//
+//        if (parameters != null) {
+//            String number = parameters.get("callerId");
+//            String displayName = TwilioSingleton.lookupContactNameByPhoneNumber(getApplicationContext(), number);
+//            String formattedNumber = TwilioSingleton.formatPhoneNumberForDisplay(number, true);
+//            if (displayName == null && formattedNumber != null) {
+//                number = formattedNumber;
+//                Log.d(TAG, "Contact Formatted Number: " + formattedNumber);
+//            }
+//            return displayName != null  ? displayName : number;
+//        }
+//        return result;
+//    }
+//
+//    private String getLineName(CallInvite callInvite) {
+//        Map<String, String> parameters = callInvite.getCustomParameters();
+//
+//        if (parameters != null) {
+//            return parameters.get("lynkName");
+//        }
+//        return null;
+//    }
 
     @TargetApi(Build.VERSION_CODES.O)
     private String createChannel(int channelImportance) {
@@ -233,7 +235,7 @@ public class IncomingCallNotificationService extends Service {
     private void accept(CallInvite callInvite, int notificationId) {
         Log.d(TAG, "Inside accept(CallInvite callInvite, int notificationId)");
 
-        boolean running = isAppRunning(getApplicationContext(), "com.dormmom.flutter_twilio_voice");
+        boolean running = twSingleton().isAppRunning("com.dormmom.flutter_twilio_voice");
         Log.d(TAG, "*** IS APP RUNNING = " + running);
 
         answer(callInvite);
@@ -241,14 +243,12 @@ public class IncomingCallNotificationService extends Service {
         endForeground();
         bringAppToForeground();
 
-
-//        Intent intent = new Intent();
-//        intent.setAction(Constants.ACTION_ANSWERED);
-//        intent.putExtra(Constants.INCOMING_CALL_NOTIFICATION_ID, notificationId);
-//        intent.putExtra(Constants.INCOMING_CALL_INVITE, callInvite);
-//        intent.addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP);
-//        intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-//        LocalBroadcastManager.getInstance(this).sendBroadcast(intent);
+        Intent intent = new Intent(this, BackgroundCallJavaActivity.class);
+        intent.addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP);
+        intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+        intent.putExtra(Constants.CALL_FROM, twSingleton().getCallerId(callInvite));
+        intent.putExtra(Constants.LINE_NAME, twSingleton().getLineName(callInvite));
+        this.startActivity(intent);
     }
 
     private void answer(CallInvite callInvite) {
@@ -331,7 +331,7 @@ public class IncomingCallNotificationService extends Service {
         }
     }
 
-    private void bringAppToForeground() {
+    void bringAppToForeground() {
         Log.d(TAG, "Inside wakePlugin()");
 
         Intent intent = new Intent();
@@ -372,105 +372,105 @@ public class IncomingCallNotificationService extends Service {
         return iconId;
     }
 
-    private String lookupContactNameByPhoneNumber(String searchNumber) {
-
-        try {
-            Uri uri = Uri.withAppendedPath(ContactsContract.PhoneLookup.CONTENT_FILTER_URI, Uri.encode(searchNumber));
-
-            ArrayList<String> nameList = new ArrayList<>();
-            String[] projection = new String[]{ContactsContract.PhoneLookup.HAS_PHONE_NUMBER, ContactsContract.PhoneLookup.DISPLAY_NAME, ContactsContract.PhoneLookup.NUMBER};
-
-            ContentResolver cr = getContentResolver();
-            Cursor cur = cr.query(uri, projection, null, null, null);
-
-            String displayName = null;
-            if ((cur != null ? cur.getCount() : 0) > 0) {
-                cur.moveToNext();
-                String number = cur.getString(cur.getColumnIndex(
-                        ContactsContract.PhoneLookup.NUMBER));
-                String name = cur.getString(cur.getColumnIndex(
-                        ContactsContract.PhoneLookup.DISPLAY_NAME));
-                displayName = name != null && !name.isEmpty() ? name : null;
-                Log.d(TAG, "Found PhoneNumber: " + number + ", Name: " + name);
-                if (cur != null) {
-                    cur.close();
-                }
-            }
-            return displayName;
-        }
-        catch (Exception e) {
-                Log.d("*** ERROR: Phone-Number Lookup: ", e.getMessage());
-                return null;
-        }
-
-    }
-
-    String formatPhoneNumberForDisplay(String phoneNumber, boolean hideLeadingOne) {
-        // Remove any character that is not a number
-
-        try {
-            final String numbersOnly = phoneNumber.replaceAll("[^\\d.]", "");
-
-            int length = numbersOnly.length();
-            boolean hasLeadingOne = numbersOnly.charAt(0) == '1';
-
-            // Check for supported phone number length
-            if (!(length <= 10 || (length == 11 && hasLeadingOne))) {
-                Log.e(TAG,"failed length test, length = $length");
-                return null;
-            }
-
-            boolean hasAreaCode = (length >= 10);
-            int sourceIndex = 0;
-
-            // Leading 1
-            String leadingOne = "";
-            if (hasLeadingOne) {
-                leadingOne = "1 ";
-                sourceIndex += 1;
-            }
-
-            // Area code
-            String areaCode = "";
-            if (hasAreaCode) {
-                int areaCodeLength = 3;
-                areaCode = "(" + numbersOnly.substring(sourceIndex, areaCodeLength + sourceIndex) + ") ";
-                sourceIndex += areaCodeLength;
-            }
-
-            // Prefix, 3 characters
-            int prefixLength = 3;
-            String prefix = numbersOnly.substring(sourceIndex, prefixLength + sourceIndex);
-            sourceIndex += prefixLength;
-
-            // Suffix, 4 characters
-            int suffixLength = 4;
-            String suffix = numbersOnly.substring(sourceIndex, suffixLength + sourceIndex);
-
-            return (hideLeadingOne ? "" : leadingOne) +
-                    areaCode +
-                    prefix +
-                    '-' +
-                    suffix;
-        } catch (Exception e) {
-            Log.e(TAG, "** ERROR: failed formatting phone number '$phoneNumber' for display.");
-            return null;
-        }
-    }
-
-    public static boolean isAppRunning(final Context context, final String packageName) {
+//    private String lookupContactNameByPhoneNumber(String searchNumber) {
+//
+//        try {
+//            Uri uri = Uri.withAppendedPath(ContactsContract.PhoneLookup.CONTENT_FILTER_URI, Uri.encode(searchNumber));
+//
+//            ArrayList<String> nameList = new ArrayList<>();
+//            String[] projection = new String[]{ContactsContract.PhoneLookup.HAS_PHONE_NUMBER, ContactsContract.PhoneLookup.DISPLAY_NAME, ContactsContract.PhoneLookup.NUMBER};
+//
+//            ContentResolver cr = getContentResolver();
+//            Cursor cur = cr.query(uri, projection, null, null, null);
+//
+//            String displayName = null;
+//            if ((cur != null ? cur.getCount() : 0) > 0) {
+//                cur.moveToNext();
+//                String number = cur.getString(cur.getColumnIndex(
+//                        ContactsContract.PhoneLookup.NUMBER));
+//                String name = cur.getString(cur.getColumnIndex(
+//                        ContactsContract.PhoneLookup.DISPLAY_NAME));
+//                displayName = name != null && !name.isEmpty() ? name : null;
+//                Log.d(TAG, "Found PhoneNumber: " + number + ", Name: " + name);
+//                if (cur != null) {
+//                    cur.close();
+//                }
+//            }
+//            return displayName;
+//        }
+//        catch (Exception e) {
+//                Log.d("*** ERROR: Phone-Number Lookup: ", e.getMessage());
+//                return null;
+//        }
+//
+//    }
+//
+//    String formatPhoneNumberForDisplay(String phoneNumber, boolean hideLeadingOne) {
+//        // Remove any character that is not a number
+//
+//        try {
+//            final String numbersOnly = phoneNumber.replaceAll("[^\\d.]", "");
+//
+//            int length = numbersOnly.length();
+//            boolean hasLeadingOne = numbersOnly.charAt(0) == '1';
+//
+//            // Check for supported phone number length
+//            if (!(length <= 10 || (length == 11 && hasLeadingOne))) {
+//                Log.e(TAG,"failed length test, length = $length");
+//                return null;
+//            }
+//
+//            boolean hasAreaCode = (length >= 10);
+//            int sourceIndex = 0;
+//
+//            // Leading 1
+//            String leadingOne = "";
+//            if (hasLeadingOne) {
+//                leadingOne = "1 ";
+//                sourceIndex += 1;
+//            }
+//
+//            // Area code
+//            String areaCode = "";
+//            if (hasAreaCode) {
+//                int areaCodeLength = 3;
+//                areaCode = "(" + numbersOnly.substring(sourceIndex, areaCodeLength + sourceIndex) + ") ";
+//                sourceIndex += areaCodeLength;
+//            }
+//
+//            // Prefix, 3 characters
+//            int prefixLength = 3;
+//            String prefix = numbersOnly.substring(sourceIndex, prefixLength + sourceIndex);
+//            sourceIndex += prefixLength;
+//
+//            // Suffix, 4 characters
+//            int suffixLength = 4;
+//            String suffix = numbersOnly.substring(sourceIndex, suffixLength + sourceIndex);
+//
+//            return (hideLeadingOne ? "" : leadingOne) +
+//                    areaCode +
+//                    prefix +
+//                    '-' +
+//                    suffix;
+//        } catch (Exception e) {
+//            Log.e(TAG, "** ERROR: failed formatting phone number '$phoneNumber' for display.");
+//            return null;
+//        }
+//    }
+//
+//    public static boolean isAppRunning(final Context context, final String packageName) {
+////        final ActivityManager activityManager = (ActivityManager) context.getSystemService(Context.ACTIVITY_SERVICE);
 //        final ActivityManager activityManager = (ActivityManager) context.getSystemService(Context.ACTIVITY_SERVICE);
-        final ActivityManager activityManager = (ActivityManager) context.getSystemService(Context.ACTIVITY_SERVICE);
-        final List<ActivityManager.RunningAppProcessInfo> procInfos = activityManager.getRunningAppProcesses();
-        if (procInfos != null)
-        {
-            for (final ActivityManager.RunningAppProcessInfo processInfo : procInfos) {
-                if (processInfo.processName.equals(packageName)) {
-                    return true;
-                }
-            }
-        }
-        return false;
-    }
-
+//        final List<ActivityManager.RunningAppProcessInfo> procInfos = activityManager.getRunningAppProcesses();
+//        if (procInfos != null)
+//        {
+//            for (final ActivityManager.RunningAppProcessInfo processInfo : procInfos) {
+//                if (processInfo.processName.equals(packageName)) {
+//                    return true;
+//                }
+//            }
+//        }
+//        return false;
+//    }
+//
 }

@@ -41,6 +41,7 @@ android {
 }
 
 dependencies {
+    implementation 'androidx.constraintlayout:constraintlayout:2.0.4'
     testImplementation 'junit:junit:4.12'
     implementation 'com.twilio:audioswitch:1.1.2'
     implementation 'com.twilio:voice-android:5.7.2'

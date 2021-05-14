@@ -84,9 +84,6 @@ public class FlutterTwilioVoicePlugin implements FlutterPlugin, MethodChannel.Me
     private String fcmToken;
     private boolean callOutgoing;
 
-    String outgoingFromNumber;
-    String outgoingToNumber;
-
     protected void finalize ()
     {
         twSingleton().unregisterPlugin();
@@ -253,6 +250,7 @@ public class FlutterTwilioVoicePlugin implements FlutterPlugin, MethodChannel.Me
     }
 
     private void showWhenInBackground() {
+        Log.d(TAG, "Inside showWhenInBackground()");
         if (activity == null) return;
 
         // These flags ensure that the activity can be launched when the screen is locked.
@@ -435,11 +433,11 @@ public class FlutterTwilioVoicePlugin implements FlutterPlugin, MethodChannel.Me
             result.success(true);
         } else if (call.method.equals("hangUp")) {
             Log.d(TAG, "Hanging up");
-            this.disconnect();
+            twSingleton().disconnect();
             result.success(true);
         } else if (call.method.equals("toggleSpeaker")) {
             boolean speakerIsOn = call.argument("speakerIsOn");
-            toggleSpeaker(speakerIsOn);
+            twSingleton().toggleSpeaker(speakerIsOn);
             result.success(true);
         } else if (call.method.equals("selectAudioDevice")) {
             String deviceID = call.argument("deviceID");
@@ -447,7 +445,7 @@ public class FlutterTwilioVoicePlugin implements FlutterPlugin, MethodChannel.Me
             result.success(true);
         } else if (call.method.equals("muteCall")) {
             Log.d(TAG, "Muting call");
-            this.mute();
+            twSingleton().mute();
             result.success(true);
         } else if (call.method.equals("isOnCall")) {
             boolean value = connected();
@@ -455,7 +453,7 @@ public class FlutterTwilioVoicePlugin implements FlutterPlugin, MethodChannel.Me
             result.success(value);
         } else if (call.method.equals("holdCall")) {
             Log.d(TAG, "Hold call invoked");
-            this.hold();
+            twSingleton().hold();
             result.success(true);
         } else if (call.method.equals("answer")) {
             Log.d(TAG, "Answering call");
@@ -483,8 +481,8 @@ public class FlutterTwilioVoicePlugin implements FlutterPlugin, MethodChannel.Me
                     params.put(key, value);
                 }
             }
-            outgoingFromNumber = params.get("From");
-            outgoingToNumber = params.get("To");
+            twSingleton().outgoingFromNumber = params.get("From");
+            twSingleton().outgoingToNumber = params.get("To");
             this.callOutgoing = true;
             final ConnectOptions connectOptions = new ConnectOptions.Builder(this.accessToken)
               .params(params)
@@ -543,8 +541,8 @@ public class FlutterTwilioVoicePlugin implements FlutterPlugin, MethodChannel.Me
                 twSingleton().activeCallInvite.reject(context);
             }
             twSingleton().activeCall = null;
-            outgoingFromNumber = null;
-            outgoingToNumber = null;
+            twSingleton().outgoingFromNumber = null;
+            twSingleton().outgoingToNumber = null;
             twSingleton().activeCallInvite = null;
         }
         twSingleton().resetActiveInviteCount();
@@ -595,43 +593,6 @@ public class FlutterTwilioVoicePlugin implements FlutterPlugin, MethodChannel.Me
         this.activity = null;
     }
 
-    private void disconnect() {
-        if (twSingleton().activeCall != null) {
-            twSingleton().activeCall.disconnect();
-            twSingleton().activeCall = null;
-            outgoingFromNumber = null;
-            outgoingToNumber = null;
-            twSingleton().activeCallInvite = null;
-            twSingleton().resetActiveInviteCount();
-
-            final HashMap<String, Object> params = new HashMap<>();
-            params.put("event", CallState.call_ended.name());
-            sendPhoneCallEvents(params);
-        }
-    }
-
-    private void hold() {
-        if (twSingleton().activeCall != null) {
-            boolean hold = twSingleton().activeCall.isOnHold();
-            twSingleton().activeCall.hold(!hold);
-
-            final HashMap<String, Object> params = new HashMap<>();
-            params.put("event", hold ? CallState.unhold.name() : CallState.hold.name());
-            sendPhoneCallEvents(params);
-        }
-    }
-
-    private void mute() {
-        if (twSingleton().activeCall != null) {
-            boolean mute = twSingleton().activeCall.isMuted();
-            twSingleton().activeCall.mute(!mute);
-
-            final HashMap<String, Object> params = new HashMap<>();
-            params.put("event", mute ? CallState.unmute.name() : CallState.mute.name());
-            sendPhoneCallEvents(params);
-        }
-    }
-
     private boolean checkPermissionForMicrophone() {
         int resultMic = ContextCompat.checkSelfPermission(this.context, Manifest.permission.RECORD_AUDIO);
         return resultMic == PackageManager.PERMISSION_GRANTED;
@@ -664,12 +625,12 @@ public class FlutterTwilioVoicePlugin implements FlutterPlugin, MethodChannel.Me
         if (call.getFrom() != null)
             from = call.getFrom();
         else if (callOutgoing)
-            from = outgoingFromNumber;
+            from = twSingleton().outgoingFromNumber;
 
         if (call.getTo() != null)
             to = call.getTo();
         else if (callOutgoing)
-            to = outgoingToNumber;
+            to = twSingleton().outgoingToNumber;
 
         if (from != null)
             params.put("from", from);
@@ -722,7 +683,7 @@ public class FlutterTwilioVoicePlugin implements FlutterPlugin, MethodChannel.Me
         return audioDevicesList;
     }
 
-    private String getAudioDeviceType(AudioDevice audioDevice) {
+    static String getAudioDeviceType(AudioDevice audioDevice) {
         if (audioDevice instanceof AudioDevice.BluetoothHeadset) {
             return "bluetooth";
         } else if (audioDevice instanceof AudioDevice.WiredHeadset) {
@@ -740,20 +701,6 @@ public class FlutterTwilioVoicePlugin implements FlutterPlugin, MethodChannel.Me
     //       to do is modify this one function.
     private String getAudioDeviceID(AudioDevice audioDevice) {
         return audioDevice.getName();
-    }
-
-    private void toggleSpeaker(boolean speakerOn) {
-        List<AudioDevice> availableAudioDevices = audioSwitch().getAvailableAudioDevices();
-        AudioDevice currentDevice = audioSwitch().getSelectedAudioDevice();
-
-        for (AudioDevice a : availableAudioDevices) {
-            String type = getAudioDeviceType(a);
-            if ((type == "speaker" && speakerOn) || (type == "earpiece" && !speakerOn)) {
-                Log.i(TAG, "Switching from " + currentDevice.getName() + " to " + a.getName());
-                audioSwitch().selectDevice(a);
-                break;
-            }
-        }
     }
 
     private void selectAudioDevice(String deviceID) {

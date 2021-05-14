@@ -1,6 +1,7 @@
 package com.dormmom.flutter_twilio_voice;
 
 import androidx.annotation.NonNull;
+import androidx.localbroadcastmanager.content.LocalBroadcastManager;
 
 import com.twilio.audioswitch.AudioDevice;
 import com.twilio.voice.Call;
@@ -12,9 +13,17 @@ import java.util.ArrayList;
 import java.util.Date;
 import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
+import android.app.ActivityManager;
+import android.content.ContentResolver;
 import android.content.Context;
+import android.content.Intent;
+import android.database.Cursor;
+import android.net.Uri;
+import android.provider.ContactsContract;
 import android.util.Log;
+import android.content.ContentResolver;
 
 import org.jetbrains.annotations.NotNull;
 
@@ -47,6 +56,9 @@ public class TwilioSingleton {
     int activeCallNotificationId;
     AudioSwitch audioSwitch;
     Call activeCall;
+    String outgoingFromNumber;
+    String outgoingToNumber;
+
 
     private TwilioSingleton(Context context) {
         // AudioManager audio settings for adjusting the volume
@@ -159,10 +171,15 @@ public class TwilioSingleton {
 
                 sendPhoneCallEvents(params);
                 resetActiveInviteCount();
-                if (twilioPlugin != null) {
-                    twilioPlugin.outgoingFromNumber = null;
-                    twilioPlugin.outgoingToNumber = null;
-                }
+
+                Intent intent = new Intent(appContext, BackgroundCallJavaActivity.class);
+                intent.setAction(Constants.ACTION_DISCONNECT);
+                intent.addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP);
+                intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                appContext.startActivity(intent);
+
+                outgoingFromNumber = null;
+                outgoingToNumber = null;
             }
         };
     }
@@ -174,6 +191,59 @@ public class TwilioSingleton {
         HashMap<String, Object> params = callToParams (call);
         params.put("event", CallState.connected.name());
         sendPhoneCallEvents(params);
+    }
+
+    void disconnect() {
+        if (activeCall != null) {
+            activeCall.disconnect();
+            activeCall = null;
+            outgoingFromNumber = null;
+            outgoingToNumber = null;
+            activeCallInvite = null;
+            resetActiveInviteCount();
+
+            final HashMap<String, Object> params = new HashMap<>();
+            params.put("event", CallState.call_ended.name());
+            sendPhoneCallEvents(params);
+        }
+    }
+
+    void hold() {
+        if (activeCall != null) {
+            boolean hold = activeCall.isOnHold();
+            activeCall.hold(!hold);
+
+            final HashMap<String, Object> params = new HashMap<>();
+            params.put("event", hold ? CallState.unhold.name() : CallState.hold.name());
+            sendPhoneCallEvents(params);
+        }
+    }
+
+    boolean mute() {
+        if (activeCall != null) {
+            boolean mute = activeCall.isMuted();
+            activeCall.mute(!mute);
+
+            final HashMap<String, Object> params = new HashMap<>();
+            params.put("event", mute ? CallState.unmute.name() : CallState.mute.name());
+            sendPhoneCallEvents(params);
+            return !mute;
+        }
+        return false;
+    }
+
+    void toggleSpeaker(boolean speakerOn) {
+        List<AudioDevice> availableAudioDevices = audioSwitch.getAvailableAudioDevices();
+        AudioDevice currentDevice = audioSwitch.getSelectedAudioDevice();
+
+        for (AudioDevice a : availableAudioDevices) {
+            String type = FlutterTwilioVoicePlugin.getAudioDeviceType(a);
+            if ((type == "speaker" && speakerOn) || (type == "earpiece" && !speakerOn)) {
+                Log.i(TAG, "Switching from " + currentDevice.getName() + " to " + a.getName());
+                audioSwitch.selectDevice(a);
+                break;
+            }
+        }
     }
 
     private void sendPhoneCallEvents(HashMap<String, Object> params) {
@@ -276,6 +346,136 @@ public class TwilioSingleton {
             activeInviteCount--;
     }
 
+    // Helper Functions
+
+    String getCallerId(CallInvite callInvite) {
+
+        String result = callInvite.getFrom();
+        Map<String, String> parameters = callInvite.getCustomParameters();
+
+        if (parameters != null) {
+            String number = parameters.get("callerId");
+            String displayName = lookupContactNameByPhoneNumber(number);
+            String formattedNumber = formatPhoneNumberForDisplay(number, true);
+            if (displayName == null && formattedNumber != null) {
+                number = formattedNumber;
+                Log.d(TAG, "Contact Formatted Number: " + formattedNumber);
+            }
+            return displayName != null  ? displayName : number;
+        }
+        return result;
+    }
+
+    static String getLineName(CallInvite callInvite) {
+        Map<String, String> parameters = callInvite.getCustomParameters();
+
+        if (parameters != null) {
+            return parameters.get("lynkName");
+        }
+        return null;
+    }
+
+    String lookupContactNameByPhoneNumber(String searchNumber) {
+
+        try {
+            Uri uri = Uri.withAppendedPath(ContactsContract.PhoneLookup.CONTENT_FILTER_URI, Uri.encode(searchNumber));
+
+            ArrayList<String> nameList = new ArrayList<>();
+            String[] projection = new String[]{ContactsContract.PhoneLookup.HAS_PHONE_NUMBER, ContactsContract.PhoneLookup.DISPLAY_NAME, ContactsContract.PhoneLookup.NUMBER};
+
+            ContentResolver cr = appContext.getContentResolver();
+            Cursor cur = cr.query(uri, projection, null, null, null);
+
+            String displayName = null;
+            if ((cur != null ? cur.getCount() : 0) > 0) {
+                cur.moveToNext();
+                String number = cur.getString(cur.getColumnIndex(
+                        ContactsContract.PhoneLookup.NUMBER));
+                String name = cur.getString(cur.getColumnIndex(
+                        ContactsContract.PhoneLookup.DISPLAY_NAME));
+                displayName = name != null && !name.isEmpty() ? name : null;
+                Log.d(TAG, "Found PhoneNumber: " + number + ", Name: " + name);
+                if (cur != null) {
+                    cur.close();
+                }
+            }
+            return displayName;
+        }
+        catch (Exception e) {
+            Log.d("*** ERROR: Phone-Number Lookup: ", e.getMessage());
+            return null;
+        }
+    }
+
+    static String formatPhoneNumberForDisplay(String phoneNumber, boolean hideLeadingOne) {
+        // Remove any character that is not a number
+
+        try {
+            final String numbersOnly = phoneNumber.replaceAll("[^\\d.]", "");
+
+            int length = numbersOnly.length();
+            boolean hasLeadingOne = numbersOnly.charAt(0) == '1';
+
+            // Check for supported phone number length
+            if (!(length <= 10 || (length == 11 && hasLeadingOne))) {
+                Log.e(TAG,"failed length test, length = $length");
+                return null;
+            }
+
+            boolean hasAreaCode = (length >= 10);
+            int sourceIndex = 0;
+
+            // Leading 1
+            String leadingOne = "";
+            if (hasLeadingOne) {
+                leadingOne = "1 ";
+                sourceIndex += 1;
+            }
+
+            // Area code
+            String areaCode = "";
+            if (hasAreaCode) {
+                int areaCodeLength = 3;
+                areaCode = "(" + numbersOnly.substring(sourceIndex, areaCodeLength + sourceIndex) + ") ";
+                sourceIndex += areaCodeLength;
+            }
+
+            // Prefix, 3 characters
+            int prefixLength = 3;
+            String prefix = numbersOnly.substring(sourceIndex, prefixLength + sourceIndex);
+            sourceIndex += prefixLength;
+
+            // Suffix, 4 characters
+            int suffixLength = 4;
+            String suffix = numbersOnly.substring(sourceIndex, suffixLength + sourceIndex);
+
+            return (hideLeadingOne ? "" : leadingOne) +
+                    areaCode +
+                    prefix +
+                    '-' +
+                    suffix;
+        } catch (Exception e) {
+            Log.e(TAG, "** ERROR: failed formatting phone number '$phoneNumber' for display.");
+            return null;
+        }
+    }
+
+    public  boolean isAppRunning(String packageName) {
+        final ActivityManager activityManager = (ActivityManager) appContext.getSystemService(Context.ACTIVITY_SERVICE);
+        final List<ActivityManager.RunningAppProcessInfo> procInfos = activityManager.getRunningAppProcesses();
+        if (procInfos != null)
+        {
+            for (final ActivityManager.RunningAppProcessInfo processInfo : procInfos) {
+                if (processInfo.processName.equals(packageName)) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
+
+    // Debug functions
     /*
      * Show the current available audio devices.
      */

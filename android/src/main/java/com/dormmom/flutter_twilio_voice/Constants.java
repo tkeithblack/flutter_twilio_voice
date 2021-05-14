@@ -20,4 +20,9 @@ public class Constants {
     public static final String ACTION_FCM_TOKEN = "ACTION_FCM_TOKEN";
     public static final String ACTION_CALLINVITE = "com.flutter.android.twilio.callinvite_message";
     public static final String EXTRA_CALLINVITE_MESSAGE = "notification";
+    public static final String CALL_FROM = "CALL_FROM";
+    public static final String LINE_NAME = "LINE_NAME";
+    public static final String ACTION_DISCONNECT = "ACTION_DISCONNECT";
+    public static final String CALL_TO = "CALL_TO";
+
 }
