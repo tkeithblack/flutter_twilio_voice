@@ -2,8 +2,10 @@ package com.dormmom.flutter_twilio_voice;
 
 import android.app.KeyguardManager;
 import android.app.NotificationManager;
+import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
+import android.content.IntentFilter;
 import android.content.res.ColorStateList;
 import android.media.AudioManager;
 import android.os.Build;
@@ -31,6 +33,8 @@ public class BackgroundCallJavaActivity extends AppCompatActivity {
     TwilioSingleton twSingleton() {
         return TwilioSingleton.getInstance(getApplicationContext());
     }
+    private boolean isReceiverRegistered = false;
+    CallScreenReceiver callScreenReceiver;
 
 //    private Call activeCall;
     private NotificationManager notificationManager;
@@ -45,9 +49,17 @@ public class BackgroundCallJavaActivity extends AppCompatActivity {
     private ImageView btnMore;
 
     @Override
+    protected void finalize() throws Throwable {
+        unregisterReceiver();
+        super.finalize();
+    }
+
+    @Override
     protected void onCreate(Bundle savedInstanceState) {
         Log.d(TAG, "onCreate");
         super.onCreate(savedInstanceState);
+        registerReceiver();
+
         setContentView(R.layout.activity_background_call);
 
         tvUserName = (TextView) findViewById(R.id.tvCallerId) ;
@@ -89,6 +101,53 @@ public class BackgroundCallJavaActivity extends AppCompatActivity {
         handleCallIntent(getIntent());
     }
 
+    private void registerReceiver() {
+        if (!isReceiverRegistered) {
+            callScreenReceiver = new CallScreenReceiver(this);
+            Log.d(TAG, "registerReceiver");
+            IntentFilter intentFilter = new IntentFilter();
+            intentFilter.addAction(Constants.ACTION_DISCONNECT);
+            LocalBroadcastManager.getInstance(this).registerReceiver(
+                    callScreenReceiver, intentFilter);
+            isReceiverRegistered = true;
+        }
+    }
+
+    private void unregisterReceiver() {
+        Log.d(TAG, "UN-registerReceiver");
+        if (isReceiverRegistered) {
+            twSingleton().unregisterPlugin();
+            LocalBroadcastManager.getInstance(this).unregisterReceiver(callScreenReceiver);
+            isReceiverRegistered = false;
+            callScreenReceiver = null;
+        }
+    }
+
+    private static class CallScreenReceiver extends BroadcastReceiver {
+
+        private final BackgroundCallJavaActivity callPage;
+
+        private CallScreenReceiver(BackgroundCallJavaActivity callPage) {
+            this.callPage = callPage;
+        }
+
+        @Override
+        public void onReceive(Context context, Intent intent) {
+            String action = intent.getAction();
+            Log.d(TAG, "Received broadcast for action " + action);
+
+            if (action != null)
+                switch (action) {
+                    case Constants.ACTION_DISCONNECT:
+                        callPage.finish();
+                        break;
+                    default:
+                        Log.d(TAG, "Received broadcast for other action " + action);
+                        break;
+                }
+        }
+    }
+
     private void handleCallIntent(Intent intent){
         Log.d(TAG, "handleCallIntent");
         if (intent != null){
@@ -124,8 +183,6 @@ public class BackgroundCallJavaActivity extends AppCompatActivity {
     }
 
     private void configCallUI() {
-        twSingleton().disconnect();
-
         Log.d(TAG, "configCallUI");
 
             btnMute.setOnClickListener(new View.OnClickListener() {

@@ -174,9 +174,9 @@ public class TwilioSingleton {
 
                 Intent intent = new Intent(appContext, BackgroundCallJavaActivity.class);
                 intent.setAction(Constants.ACTION_DISCONNECT);
-                intent.addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP);
-                intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-                appContext.startActivity(intent);
+//                intent.addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP);
+//                intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                LocalBroadcastManager.getInstance(appContext).sendBroadcast(intent);
 
                 outgoingFromNumber = null;
                 outgoingToNumber = null;
@@ -194,11 +194,14 @@ public class TwilioSingleton {
     }
 
     void disconnect() {
+        Log.d(TAG, "Inside disconnect()");
         if (activeCall != null) {
             activeCall.disconnect();
             activeCall = null;
             outgoingFromNumber = null;
             outgoingToNumber = null;
+            Log.d(TAG, "Setting activeCallInvite = null: Loc 3");
+
             activeCallInvite = null;
             resetActiveInviteCount();
 
@@ -321,6 +324,7 @@ public class TwilioSingleton {
             // public Boolean isVerified()
             // Returns `true` if the caller has been validated at 'A' level, `false` if the caller has been verified at any lower level or has failed validation. Returns `null` if no caller verification information is available or if stir status value is `null`.
 
+            Log.d(TAG, "Setting activeCallInvite = callInvite. callInvite = " + callInvite);
             activeCallInvite = callInvite;
             activeCallNotificationId = notificationId;
             SoundManager.getInstance(appContext).playRinging();

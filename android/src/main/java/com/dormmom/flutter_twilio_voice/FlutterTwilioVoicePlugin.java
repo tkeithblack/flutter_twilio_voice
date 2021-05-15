@@ -169,8 +169,8 @@ public class FlutterTwilioVoicePlugin implements FlutterPlugin, MethodChannel.Me
 //                answer();
 //                break;
             case Constants.ACTION_DECLINED:
-                twSingleton().activeCallNotificationId = intent.getIntExtra(Constants.INCOMING_CALL_NOTIFICATION_ID, 0);
-                twSingleton().activeCallInvite = intent.getParcelableExtra(Constants.INCOMING_CALL_INVITE);
+//                twSingleton().activeCallNotificationId = intent.getIntExtra(Constants.INCOMING_CALL_NOTIFICATION_ID, 0);
+//                twSingleton().activeCallInvite = intent.getParcelableExtra(Constants.INCOMING_CALL_INVITE);
                 reject(true);
                 break;
             case Constants.ACTION_APP_TO_FOREGROUND:
@@ -245,6 +245,7 @@ public class FlutterTwilioVoicePlugin implements FlutterPlugin, MethodChannel.Me
             callOutgoing = false;
             SoundManager.getInstance(context).stopRinging();
 
+            Log.d(TAG, "Setting activeCallInvite = null: Loc 1");
             twSingleton().activeCallInvite = null;
         }
     }
@@ -495,6 +496,7 @@ public class FlutterTwilioVoicePlugin implements FlutterPlugin, MethodChannel.Me
             // a Notification window answers the call.
             //
             // When the replayed callInvite is sent an extra parameter will be set 'replay: true'
+            Log.d(TAG, "replayCallConnection(), activeCallInvite  = " + twSingleton().activeCallInvite + ", activeCall = " + twSingleton().activeCall);
             if (twSingleton().activeCallInvite != null && twSingleton().activeCall != null) {
                 sendIncomingCallInfo(twSingleton().activeCallInvite, twSingleton().activeCallNotificationId , true);
                 twSingleton().handleCallConnect(twSingleton().activeCall);
@@ -543,6 +545,8 @@ public class FlutterTwilioVoicePlugin implements FlutterPlugin, MethodChannel.Me
             twSingleton().activeCall = null;
             twSingleton().outgoingFromNumber = null;
             twSingleton().outgoingToNumber = null;
+            Log.d(TAG, "Setting activeCallInvite = null: Loc 2");
+
             twSingleton().activeCallInvite = null;
         }
         twSingleton().resetActiveInviteCount();
