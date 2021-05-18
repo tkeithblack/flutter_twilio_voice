@@ -221,16 +221,14 @@ public class BackgroundCallJavaActivity extends AppCompatActivity {
 
     private void applyFabState(ImageView button, Boolean enabled) {
         // Set fab as pressed when call is on hold
-
-        ColorStateList colorStateList;
-
         if(enabled){
-            colorStateList = ColorStateList.valueOf(ContextCompat.getColor(this, R.color.white_55));
+            button.setBackgroundResource(R.drawable.bg_full_rounded);
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+                ColorStateList colorStateList = ColorStateList.valueOf(ContextCompat.getColor(this, R.color.white_55));
+                button.setBackgroundTintList(colorStateList);
+            }
         }else{
-            colorStateList = ColorStateList.valueOf(ContextCompat.getColor(this, R.color.cardview_dark_background));
-        }
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
-            button.setBackgroundTintList(colorStateList);
+            button.setBackgroundResource(0);
         }
     }
 
