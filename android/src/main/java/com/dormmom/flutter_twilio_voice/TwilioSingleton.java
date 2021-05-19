@@ -23,7 +23,6 @@ import android.database.Cursor;
 import android.net.Uri;
 import android.provider.ContactsContract;
 import android.util.Log;
-import android.content.ContentResolver;
 
 import org.jetbrains.annotations.NotNull;
 
@@ -132,6 +131,7 @@ public class TwilioSingleton {
             public void onConnected(@NotNull Call call) {
                 Log.d(TAG, "onConnected");
                 audioSwitch.activate();
+                toggleSpeaker(false);
                 handleCallConnect(call);
                 queryAndSendAudioDeviceInfo();
             }
@@ -172,7 +172,7 @@ public class TwilioSingleton {
                 sendPhoneCallEvents(params);
                 resetActiveInviteCount();
 
-                Intent intent = new Intent(appContext, BackgroundCallJavaActivity.class);
+                Intent intent = new Intent(appContext, IncomingCallPageActivity.class);
                 intent.setAction(Constants.ACTION_DISCONNECT);
 //                intent.addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP);
 //                intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);

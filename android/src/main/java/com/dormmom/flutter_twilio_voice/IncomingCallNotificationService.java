@@ -1,23 +1,18 @@
 package com.dormmom.flutter_twilio_voice;
 
 import android.annotation.TargetApi;
-import android.app.ActivityManager;
 import android.app.Notification;
 import android.app.NotificationChannel;
 import android.app.NotificationManager;
 import android.app.PendingIntent;
 import android.app.Service;
-import android.content.ContentResolver;
 import android.content.Context;
 import android.content.Intent;
 import android.content.pm.ApplicationInfo;
-import android.database.Cursor;
 import android.graphics.Color;
-import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
 import android.os.IBinder;
-import android.provider.ContactsContract;
 import android.util.Log;
 
 import androidx.core.app.NotificationCompat;
@@ -26,10 +21,6 @@ import androidx.lifecycle.ProcessLifecycleOwner;
 import androidx.localbroadcastmanager.content.LocalBroadcastManager;
 
 import com.twilio.voice.CallInvite;
-
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Map;
 
 import static android.app.Notification.*;
 
@@ -225,7 +216,8 @@ public class IncomingCallNotificationService extends Service {
             channelId = Constants.VOICE_CHANNEL_LOW_IMPORTANCE;
         }
         callInviteChannel.setLightColor(Color.GREEN);
-        callInviteChannel.setLockscreenVisibility(VISIBILITY_PRIVATE);
+//        callInviteChannel.setLockscreenVisibility(VISIBILITY_PRIVATE);
+        callInviteChannel.setLockscreenVisibility(VISIBILITY_PUBLIC);
         NotificationManager notificationManager = (NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE);
         notificationManager.createNotificationChannel(callInviteChannel);
 
@@ -243,7 +235,7 @@ public class IncomingCallNotificationService extends Service {
         endForeground();
         bringAppToForeground();
 
-        Intent intent = new Intent(this, BackgroundCallJavaActivity.class);
+        Intent intent = new Intent(this, IncomingCallPageActivity.class);
         intent.addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP);
         intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
         intent.putExtra(Constants.CALL_FROM, twSingleton().getCallerId(callInvite));
@@ -371,106 +363,4 @@ public class IncomingCallNotificationService extends Service {
         int iconId = applicationInfo.icon;
         return iconId;
     }
-
-//    private String lookupContactNameByPhoneNumber(String searchNumber) {
-//
-//        try {
-//            Uri uri = Uri.withAppendedPath(ContactsContract.PhoneLookup.CONTENT_FILTER_URI, Uri.encode(searchNumber));
-//
-//            ArrayList<String> nameList = new ArrayList<>();
-//            String[] projection = new String[]{ContactsContract.PhoneLookup.HAS_PHONE_NUMBER, ContactsContract.PhoneLookup.DISPLAY_NAME, ContactsContract.PhoneLookup.NUMBER};
-//
-//            ContentResolver cr = getContentResolver();
-//            Cursor cur = cr.query(uri, projection, null, null, null);
-//
-//            String displayName = null;
-//            if ((cur != null ? cur.getCount() : 0) > 0) {
-//                cur.moveToNext();
-//                String number = cur.getString(cur.getColumnIndex(
-//                        ContactsContract.PhoneLookup.NUMBER));
-//                String name = cur.getString(cur.getColumnIndex(
-//                        ContactsContract.PhoneLookup.DISPLAY_NAME));
-//                displayName = name != null && !name.isEmpty() ? name : null;
-//                Log.d(TAG, "Found PhoneNumber: " + number + ", Name: " + name);
-//                if (cur != null) {
-//                    cur.close();
-//                }
-//            }
-//            return displayName;
-//        }
-//        catch (Exception e) {
-//                Log.d("*** ERROR: Phone-Number Lookup: ", e.getMessage());
-//                return null;
-//        }
-//
-//    }
-//
-//    String formatPhoneNumberForDisplay(String phoneNumber, boolean hideLeadingOne) {
-//        // Remove any character that is not a number
-//
-//        try {
-//            final String numbersOnly = phoneNumber.replaceAll("[^\\d.]", "");
-//
-//            int length = numbersOnly.length();
-//            boolean hasLeadingOne = numbersOnly.charAt(0) == '1';
-//
-//            // Check for supported phone number length
-//            if (!(length <= 10 || (length == 11 && hasLeadingOne))) {
-//                Log.e(TAG,"failed length test, length = $length");
-//                return null;
-//            }
-//
-//            boolean hasAreaCode = (length >= 10);
-//            int sourceIndex = 0;
-//
-//            // Leading 1
-//            String leadingOne = "";
-//            if (hasLeadingOne) {
-//                leadingOne = "1 ";
-//                sourceIndex += 1;
-//            }
-//
-//            // Area code
-//            String areaCode = "";
-//            if (hasAreaCode) {
-//                int areaCodeLength = 3;
-//                areaCode = "(" + numbersOnly.substring(sourceIndex, areaCodeLength + sourceIndex) + ") ";
-//                sourceIndex += areaCodeLength;
-//            }
-//
-//            // Prefix, 3 characters
-//            int prefixLength = 3;
-//            String prefix = numbersOnly.substring(sourceIndex, prefixLength + sourceIndex);
-//            sourceIndex += prefixLength;
-//
-//            // Suffix, 4 characters
-//            int suffixLength = 4;
-//            String suffix = numbersOnly.substring(sourceIndex, suffixLength + sourceIndex);
-//
-//            return (hideLeadingOne ? "" : leadingOne) +
-//                    areaCode +
-//                    prefix +
-//                    '-' +
-//                    suffix;
-//        } catch (Exception e) {
-//            Log.e(TAG, "** ERROR: failed formatting phone number '$phoneNumber' for display.");
-//            return null;
-//        }
-//    }
-//
-//    public static boolean isAppRunning(final Context context, final String packageName) {
-////        final ActivityManager activityManager = (ActivityManager) context.getSystemService(Context.ACTIVITY_SERVICE);
-//        final ActivityManager activityManager = (ActivityManager) context.getSystemService(Context.ACTIVITY_SERVICE);
-//        final List<ActivityManager.RunningAppProcessInfo> procInfos = activityManager.getRunningAppProcesses();
-//        if (procInfos != null)
-//        {
-//            for (final ActivityManager.RunningAppProcessInfo processInfo : procInfos) {
-//                if (processInfo.processName.equals(packageName)) {
-//                    return true;
-//                }
-//            }
-//        }
-//        return false;
-//    }
-//
 }

@@ -23,12 +23,10 @@ import androidx.lifecycle.Lifecycle;
 import androidx.lifecycle.ProcessLifecycleOwner;
 import androidx.localbroadcastmanager.content.LocalBroadcastManager;
 
-//import com.twilio.voice.Call;
 
+public class IncomingCallPageActivity extends AppCompatActivity {
 
-public class BackgroundCallJavaActivity extends AppCompatActivity {
-
-    private static String TAG = "BackgroundCallActivity";
+    private static String TAG = "IncomingCallPageActivity";
     public static final String TwilioPreferences = "mx.TwilioPreferences";
     TwilioSingleton twSingleton() {
         return TwilioSingleton.getInstance(getApplicationContext());
@@ -70,9 +68,9 @@ public class BackgroundCallJavaActivity extends AppCompatActivity {
         btnMore = (ImageView) findViewById(R.id.btnMore);
 
         KeyguardManager kgm = (KeyguardManager) getSystemService(Context.KEYGUARD_SERVICE);
-        Boolean isKeyguardUp = kgm.inKeyguardRestrictedInputMode();
+        Boolean isKeyguardUp = kgm.isKeyguardLocked();
 
-        Log.d(TAG, "isKeyguardUp $isKeyguardUp");
+        Log.d(TAG, "isKeyguardUp = " + isKeyguardUp);
         if (isKeyguardUp) {
 
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O_MR1) {
@@ -84,7 +82,7 @@ public class BackgroundCallJavaActivity extends AppCompatActivity {
             }else{
                 Log.d(TAG, "diego's old phone!");
                 PowerManager pm = (PowerManager) getSystemService(Context.POWER_SERVICE);
-                wakeLock = pm.newWakeLock(PowerManager.FULL_WAKE_LOCK, TAG);
+                wakeLock = pm.newWakeLock(PowerManager.FULL_WAKE_LOCK | PowerManager.ACQUIRE_CAUSES_WAKEUP, TAG);
                 wakeLock.acquire(10*60*1000L /*10 minutes*/);
 
                 getWindow().addFlags(
@@ -125,9 +123,9 @@ public class BackgroundCallJavaActivity extends AppCompatActivity {
 
     private static class CallScreenReceiver extends BroadcastReceiver {
 
-        private final BackgroundCallJavaActivity callPage;
+        private final IncomingCallPageActivity callPage;
 
-        private CallScreenReceiver(BackgroundCallJavaActivity callPage) {
+        private CallScreenReceiver(IncomingCallPageActivity callPage) {
             this.callPage = callPage;
         }
 
