@@ -11,13 +11,15 @@
 
     <application>
 
-        <activity android:name=".BackgroundCallJavaActivity" android:turnScreenOn="true" android:showWhenLocked="true" android:showOnLockScreen="true" android:theme="@style/Theme.AppCompat" />
+        <activity android:name=".AnswerJavaActivity" android:turnScreenOn="true" android:showWhenLocked="true" android:showOnLockScreen="true" android:theme="@style/Theme.AppCompat" />
+        <activity android:name=".BackgroundCallPageActivity" android:turnScreenOn="true" android:showWhenLocked="true" android:showOnLockScreen="true" android:theme="@style/Theme.AppCompat" />
 
         <service android:enabled="true" android:name=".IncomingCallNotificationService">
-        <intent-filter>
-            <action android:name="ACTION_ACCEPT" />
-            <action android:name="ACTION_REJECT" />
-        </intent-filter>
-    </service>
+            <intent-filter>
+                <action android:name="ACTION_ACCEPT" />
+                <action android:name="ACTION_REJECT" />
+            </intent-filter>
+        </service>
+        <meta-data android:name="flutterEmbedding" android:value="2" />
     </application>
 </manifest>
