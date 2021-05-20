@@ -257,14 +257,16 @@ public class FlutterTwilioVoicePlugin implements FlutterPlugin, MethodChannel.Me
         // These flags ensure that the activity can be launched when the screen is locked.
         Window window = activity.getWindow();
 
-        window.addFlags(WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED
-                | WindowManager.LayoutParams.FLAG_TURN_SCREEN_ON
-                | WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
+        window.addFlags(WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED |
+                WindowManager.LayoutParams.FLAG_FULLSCREEN |
+                        WindowManager.LayoutParams.FLAG_DISMISS_KEYGUARD |
+                        WindowManager.LayoutParams.FLAG_TURN_SCREEN_ON |
+                        WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
 
         // to wake up screen
         PowerManager pm = (PowerManager) context.getSystemService(Context.POWER_SERVICE);
 
-        PowerManager.WakeLock wakeLock = pm.newWakeLock((PowerManager.FULL_WAKE_LOCK | PowerManager.ACQUIRE_CAUSES_WAKEUP), "flutter.twilio.wakelock:TAG");
+        PowerManager.WakeLock wakeLock = pm.newWakeLock((PowerManager.FULL_WAKE_LOCK), "flutter.twilio.wakelock:TAG");
         wakeLock.acquire();
 
         // to release screen lock

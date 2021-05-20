@@ -78,12 +78,11 @@ public class IncomingCallPageActivity extends AppCompatActivity {
                 setTurnScreenOn(true);
                 setShowWhenLocked(true);
                 kgm.requestDismissKeyguard(this, null);
-
             }else{
-                Log.d(TAG, "diego's old phone!");
-                PowerManager pm = (PowerManager) getSystemService(Context.POWER_SERVICE);
-                wakeLock = pm.newWakeLock(PowerManager.FULL_WAKE_LOCK | PowerManager.ACQUIRE_CAUSES_WAKEUP, TAG);
-                wakeLock.acquire(10*60*1000L /*10 minutes*/);
+//                Log.d(TAG, "diego's old phone!");
+//                PowerManager pm = (PowerManager) getSystemService(Context.POWER_SERVICE);
+//                wakeLock = pm.newWakeLock(PowerManager.FULL_WAKE_LOCK, TAG);
+//                wakeLock.acquire(10*60*1000L /*10 minutes*/);
 
                 getWindow().addFlags(
                         WindowManager.LayoutParams.FLAG_FULLSCREEN |

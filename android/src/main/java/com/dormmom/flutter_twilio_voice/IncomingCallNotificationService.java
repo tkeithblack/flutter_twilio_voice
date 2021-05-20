@@ -70,7 +70,8 @@ public class IncomingCallNotificationService extends Service {
     private Notification createNotification(CallInvite callInvite, int notificationId, int channelImportance) {
         Log.d(TAG, "Inside createNotification()");
 
-        Intent intent = new Intent();
+        Intent intent = new Intent(this, AnswerJavaActivity.class);
+//        Intent intent = new Intent();
         intent.setAction(Constants.ACTION_INCOMING_CALL_NOTIFICATION);
         intent.putExtra(Constants.INCOMING_CALL_NOTIFICATION_ID, notificationId);
         intent.putExtra(Constants.INCOMING_CALL_INVITE, callInvite);
@@ -103,6 +104,8 @@ public class IncomingCallNotificationService extends Service {
                     .setSmallIcon(R.drawable.ic_call_end_white_24dp)
                     .setContentTitle(getApplicationName(context))
                     .setContentText(notificationText)
+                    .setCategory(Notification.CATEGORY_CALL)
+                    .setFullScreenIntent(pendingIntent, true)
                     .setAutoCancel(true)
                     .setExtras(extras)
                     .setContentIntent(pendingIntent)
@@ -148,14 +151,16 @@ public class IncomingCallNotificationService extends Service {
 //                  .setColor(ContextCompat.getColor(context, R.color.design_default_color_primary))
                   .setContentTitle(title)
                   .setContentText(text)
-                  .setCategory(CATEGORY_CALL)
-                  .setLights(Color.RED, 3000, 3000)
-                  .setSound(null)
+                  .setCategory(Notification.CATEGORY_CALL)
+                  .setFullScreenIntent(pendingIntent, true)
+                  .setContentIntent(pendingIntent)
                   .setExtras(extras)
                   .setAutoCancel(true)
+                  .setVisibility(Notification.VISIBILITY_PUBLIC)
+                  .setLights(Color.GREEN, 3000, 3000)
+                  .setSound(null)
                   .addAction(rejectAction)
-                  .addAction(answerAction)
-                  .setFullScreenIntent(pendingIntent, true);
+                  .addAction(answerAction);
 
         return builder.build();
     }
@@ -176,33 +181,6 @@ public class IncomingCallNotificationService extends Service {
         }
         return callerId;
     }
-
-//    private String getCallerId(CallInvite callInvite) {
-//
-//        String result = callInvite.getFrom();
-//        Map<String, String> parameters = callInvite.getCustomParameters();
-//
-//        if (parameters != null) {
-//            String number = parameters.get("callerId");
-//            String displayName = TwilioSingleton.lookupContactNameByPhoneNumber(getApplicationContext(), number);
-//            String formattedNumber = TwilioSingleton.formatPhoneNumberForDisplay(number, true);
-//            if (displayName == null && formattedNumber != null) {
-//                number = formattedNumber;
-//                Log.d(TAG, "Contact Formatted Number: " + formattedNumber);
-//            }
-//            return displayName != null  ? displayName : number;
-//        }
-//        return result;
-//    }
-//
-//    private String getLineName(CallInvite callInvite) {
-//        Map<String, String> parameters = callInvite.getCustomParameters();
-//
-//        if (parameters != null) {
-//            return parameters.get("lynkName");
-//        }
-//        return null;
-//    }
 
     @TargetApi(Build.VERSION_CODES.O)
     private String createChannel(int channelImportance) {
@@ -233,7 +211,7 @@ public class IncomingCallNotificationService extends Service {
         answer(callInvite);
 
         endForeground();
-        bringAppToForeground();
+        twSingleton().bringAppToForeground(this);
 
         Intent intent = new Intent(this, IncomingCallPageActivity.class);
         intent.addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP);
@@ -244,6 +222,7 @@ public class IncomingCallNotificationService extends Service {
     }
 
     private void answer(CallInvite callInvite) {
+        endForeground();
         Log.d(TAG, "Answering call");
         SoundManager.getInstance(getApplicationContext()).stopRinging();
         if (callInvite != null) {
@@ -285,6 +264,7 @@ public class IncomingCallNotificationService extends Service {
     }
 
     private void handleCancelledCall(Intent intent) {
+        Log.d(TAG, "handleCancelledCall: " + intent);
         endForeground();
         LocalBroadcastManager.getInstance(this).sendBroadcast(intent);
     }
@@ -302,7 +282,7 @@ public class IncomingCallNotificationService extends Service {
             } else {
                 Log.i(TAG, "Android Version " + Build.VERSION.SDK_INT + ". Launching App to foreground");
                 pluginDisplayedAnswerScreen = false;
-                bringAppToForeground();
+                twSingleton().bringAppToForeground(this);
                 sendCallInviteToActivity(callInvite, notificationId);
             }
         }
@@ -323,16 +303,16 @@ public class IncomingCallNotificationService extends Service {
         }
     }
 
-    void bringAppToForeground() {
-        Log.d(TAG, "Inside wakePlugin()");
-
-        Intent intent = new Intent();
-        intent.setAction(Constants.ACTION_APP_TO_FOREGROUND);
-        intent.addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP);
-        intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-        this.startActivity(intent);
-    }
-
+//    void bringAppToForeground() {
+//        Log.d(TAG, "Inside wakePlugin()");
+//
+//        Intent intent = new Intent();
+//        intent.setAction(Constants.ACTION_APP_TO_FOREGROUND);
+//        intent.addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP);
+//        intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+//        this.startActivity(intent);
+//    }
+//
     private static boolean isAppVisible() {
         return ProcessLifecycleOwner
           .get()

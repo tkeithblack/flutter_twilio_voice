@@ -174,8 +174,6 @@ public class TwilioSingleton {
 
                 Intent intent = new Intent(appContext, IncomingCallPageActivity.class);
                 intent.setAction(Constants.ACTION_DISCONNECT);
-//                intent.addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP);
-//                intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
                 LocalBroadcastManager.getInstance(appContext).sendBroadcast(intent);
 
                 outgoingFromNumber = null;
@@ -247,6 +245,16 @@ public class TwilioSingleton {
                 break;
             }
         }
+    }
+
+    void bringAppToForeground(Context parent) {
+        Log.d(TAG, "Inside wakePlugin()");
+
+        Intent intent = new Intent();
+        intent.setAction(Constants.ACTION_APP_TO_FOREGROUND);
+        intent.addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP);
+        intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+        parent.startActivity(intent);
     }
 
     private void sendPhoneCallEvents(HashMap<String, Object> params) {
