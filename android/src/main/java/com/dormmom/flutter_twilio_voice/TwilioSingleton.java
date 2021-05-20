@@ -172,7 +172,7 @@ public class TwilioSingleton {
                 sendPhoneCallEvents(params);
                 resetActiveInviteCount();
 
-                Intent intent = new Intent(appContext, IncomingCallPageActivity.class);
+                Intent intent = new Intent(appContext, BackgroundCallPageActivity.class);
                 intent.setAction(Constants.ACTION_DISCONNECT);
                 LocalBroadcastManager.getInstance(appContext).sendBroadcast(intent);
 

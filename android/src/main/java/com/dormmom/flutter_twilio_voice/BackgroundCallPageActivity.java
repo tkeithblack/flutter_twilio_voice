@@ -24,7 +24,7 @@ import androidx.lifecycle.ProcessLifecycleOwner;
 import androidx.localbroadcastmanager.content.LocalBroadcastManager;
 
 
-public class IncomingCallPageActivity extends AppCompatActivity {
+public class BackgroundCallPageActivity extends AppCompatActivity {
 
     private static String TAG = "IncomingCallPageActivity";
     public static final String TwilioPreferences = "mx.TwilioPreferences";
@@ -122,9 +122,9 @@ public class IncomingCallPageActivity extends AppCompatActivity {
 
     private static class CallScreenReceiver extends BroadcastReceiver {
 
-        private final IncomingCallPageActivity callPage;
+        private final BackgroundCallPageActivity callPage;
 
-        private CallScreenReceiver(IncomingCallPageActivity callPage) {
+        private CallScreenReceiver(BackgroundCallPageActivity callPage) {
             this.callPage = callPage;
         }
 

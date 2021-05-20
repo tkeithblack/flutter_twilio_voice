@@ -213,7 +213,7 @@ public class IncomingCallNotificationService extends Service {
         endForeground();
         twSingleton().bringAppToForeground(this);
 
-        Intent intent = new Intent(this, IncomingCallPageActivity.class);
+        Intent intent = new Intent(this, BackgroundCallPageActivity.class);
         intent.addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP);
         intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
         intent.putExtra(Constants.CALL_FROM, twSingleton().getCallerId(callInvite));
