@@ -506,8 +506,11 @@ public class FlutterTwilioVoicePlugin implements FlutterPlugin, MethodChannel.Me
                 return;
             }
             result.success(false);
-        }
-        else {
+        } else if (call.method.equals("refreshAudioRoute")) {
+            // Used to query and send auto state back to Flutter App.
+            twSingleton().queryAndSendAudioDeviceInfo();
+            result.success(true);
+        } else {
             result.notImplemented();
         }
     }

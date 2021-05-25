@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -196,6 +197,13 @@ class FlutterTwilioVoice {
 
   Future<void> replayCallConnection() {
     return _channel.invokeMethod('replayCallConnection', <String, dynamic>{});
+  }
+
+  Future<void> refreshAudioRoute() {
+    if (Platform.isAndroid) {
+      return _channel.invokeMethod('refreshAudioRoute', <String, dynamic>{});
+    }
+    return null;
   }
 
   // Legacy Methods replaced by new version ---------
