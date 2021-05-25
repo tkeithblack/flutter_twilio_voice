@@ -22,9 +22,13 @@ import androidx.core.content.ContextCompat;
 import androidx.lifecycle.Lifecycle;
 import androidx.lifecycle.ProcessLifecycleOwner;
 import androidx.localbroadcastmanager.content.LocalBroadcastManager;
+import android.hardware.Sensor;
+import android.hardware.SensorEvent;
+import android.hardware.SensorEventListener;
+import android.hardware.SensorManager;
+import android.view.WindowManager.LayoutParams;
 
-
-public class BackgroundCallPageActivity extends AppCompatActivity {
+public class BackgroundCallPageActivity extends AppCompatActivity implements SensorEventListener {
 
     private static String TAG = "IncomingCallPageActivity";
     public static final String TwilioPreferences = "mx.TwilioPreferences";
@@ -34,7 +38,15 @@ public class BackgroundCallPageActivity extends AppCompatActivity {
     private boolean isReceiverRegistered = false;
     CallScreenReceiver callScreenReceiver;
 
-//    private Call activeCall;
+    // Vars used for proximitySensor.
+    private SensorManager mSensorManager;
+    private Sensor proximitySensor;
+    private static final int SENSOR_SENSITIVITY = 4;
+    private boolean onCancelCalled = false;
+    private boolean far = true;
+    private static int field = 0x00000020;
+
+    //    private Call activeCall;
     private NotificationManager notificationManager;
 
     private PowerManager.WakeLock wakeLock;
@@ -58,6 +70,9 @@ public class BackgroundCallPageActivity extends AppCompatActivity {
         super.onCreate(savedInstanceState);
         registerReceiver();
 
+        mSensorManager = (SensorManager) getSystemService(Context.SENSOR_SERVICE);
+        proximitySensor = mSensorManager.getDefaultSensor(Sensor.TYPE_PROXIMITY);
+
         setContentView(R.layout.activity_background_call);
 
         tvUserName = (TextView) findViewById(R.id.tvCallerId) ;
@@ -69,6 +84,12 @@ public class BackgroundCallPageActivity extends AppCompatActivity {
 
         KeyguardManager kgm = (KeyguardManager) getSystemService(Context.KEYGUARD_SERVICE);
         Boolean isKeyguardUp = kgm.isKeyguardLocked();
+
+        PowerManager powerManager = (PowerManager) getSystemService(Context.POWER_SERVICE);
+        try {
+            field = PowerManager.class.getField("PROXIMITY_SCREEN_OFF_WAKE_LOCK").getInt(null);
+        } catch (Throwable ignored) {}
+        this.wakeLock = powerManager.newWakeLock(field, "AllSensors::Wakelock");
 
         Log.d(TAG, "isKeyguardUp = " + isKeyguardUp);
         if (isKeyguardUp) {
@@ -96,6 +117,69 @@ public class BackgroundCallPageActivity extends AppCompatActivity {
         notificationManager = (NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE);
 
         handleCallIntent(getIntent());
+    }
+
+    @Override
+    protected void onResume() {
+        Log.d(TAG, "onResume()");
+        super.onResume();
+        onCancelCalled = false;
+        mSensorManager.registerListener(this, proximitySensor, SensorManager.SENSOR_DELAY_NORMAL);
+    }
+
+    @Override
+    protected void onPause() {
+        Log.d(TAG, "onPause()");
+        super.onPause();
+        onCancelCalled = true;
+        mSensorManager.unregisterListener(this);
+    }
+
+    @Override
+    public void onSensorChanged(SensorEvent event) {
+
+        double[] sensorValues = new double[event.values.length];
+        for (int i = 0; i < event.values.length; i++) {
+            sensorValues[i] = event.values[i];
+        }
+        if (event.sensor.getType() == Sensor.TYPE_PROXIMITY) {
+            if(onCancelCalled && far) mSensorManager.unregisterListener(this);
+            else setWakeLock(sensorValues[0]);
+        }
+
+//        if (event.sensor.getType() == Sensor.TYPE_PROXIMITY) {
+//            if (event.values[0] < proximitySensor.getMaximumRange()) {
+//                //near
+//                Log.d(TAG, "Proximety LESS THAN getMaxRange");
+////                Toast.makeText(getApplicationContext(), "near", Toast.LENGTH_SHORT).show();
+//            } else {
+//                Log.d(TAG, "Proximety GREATER THAN getMaxRange");
+//                //far
+////                Toast.makeText(getApplicationContext(), "far", Toast.LENGTH_SHORT).show();
+//            }
+//        }
+    }
+
+    private void setWakeLock (double value) {
+        try {
+            if (value == 0) {
+                far = false;
+                Log.d(TAG, "setWakeLock - acquire()");
+                wakeLock.acquire();
+            }
+            else if (wakeLock.isHeld()) {
+                far = true;
+                Log.d(TAG, "setWakeLock - release()");
+                wakeLock.release();
+            }
+        }catch (Exception e) {
+            e.printStackTrace();
+        }
+    }
+
+    @Override
+    public void onAccuracyChanged(Sensor sensor, int i) {
+        Log.d(TAG, "Proximety onAccuracyChanged: " + i);
     }
 
     private void registerReceiver() {
@@ -254,9 +338,11 @@ public class BackgroundCallPageActivity extends AppCompatActivity {
     @Override
     protected void onDestroy() {
         super.onDestroy();
-        if (wakeLock != null){
+
+        if (wakeLock != null && wakeLock.isHeld()) {
+            far = true;
+            Log.d(TAG, "onDestroy - release()");
             wakeLock.release();
         }
     }
-
 }

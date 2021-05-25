@@ -256,11 +256,7 @@ public class IncomingCallNotificationService extends Service {
         intent.setAction(Constants.ACTION_INCOMING_CALL);
         intent.putExtra(Constants.INCOMING_CALL_NOTIFICATION_ID, notificationId);
         intent.putExtra(Constants.INCOMING_CALL_INVITE, callInvite);
-        // TODO: Maybe set these flags below if app should display incoming.
-//        intent.addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP);
-//        intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
         LocalBroadcastManager.getInstance(this).sendBroadcast(intent);
-//        this.startActivity(intent);
     }
 
     private void handleCancelledCall(Intent intent) {
@@ -278,9 +274,8 @@ public class IncomingCallNotificationService extends Service {
                 Log.i(TAG, "Android Version " + Build.VERSION.SDK_INT + ". Displaying Popup Notificaiton for incoming call.");
                 pluginDisplayedAnswerScreen = true;
                 setCallInProgressNotification(callInvite, notificationId);
-//                sendCallInviteToActivity(callInvite, notificationId);
             } else {
-                Log.i(TAG, "Android Version " + Build.VERSION.SDK_INT + ". Launching App to foreground");
+                Log.i(TAG, "Android Version " + Build.VERSION.SDK_INT + ". Launching App to foreground for incoming call.");
                 pluginDisplayedAnswerScreen = false;
                 twSingleton().bringAppToForeground(this);
                 sendCallInviteToActivity(callInvite, notificationId);
@@ -303,16 +298,6 @@ public class IncomingCallNotificationService extends Service {
         }
     }
 
-//    void bringAppToForeground() {
-//        Log.d(TAG, "Inside wakePlugin()");
-//
-//        Intent intent = new Intent();
-//        intent.setAction(Constants.ACTION_APP_TO_FOREGROUND);
-//        intent.addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP);
-//        intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-//        this.startActivity(intent);
-//    }
-//
     private static boolean isAppVisible() {
         return ProcessLifecycleOwner
           .get()

@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -111,7 +110,7 @@ class FlutterTwilioVoice {
   var _audioDevices = List<AudioDevice>();
 
   int callStartedOn;
-  CallDirection callDirection = CallDirection.incoming;
+  CallDirection _callDirection = CallDirection.incoming;
 
   Stream<CallState> get onCallStateChanged {
     if (_onCallStateChanged == null) {
@@ -146,7 +145,7 @@ class FlutterTwilioVoice {
     options['toDisplayName'] = toDisplayName;
     callFrom = from;
     callTo = to;
-    callDirection = CallDirection.outgoing;
+    _callDirection = CallDirection.outgoing;
     return _channel.invokeMethod('makeCall', options);
   }
 
@@ -236,11 +235,11 @@ class FlutterTwilioVoice {
   }
 
   String get externalNumber {
-    return callDirection == CallDirection.incoming ? fromNumber : toNumber;
+    return _callDirection == CallDirection.incoming ? fromNumber : toNumber;
   }
 
   String get internalNumber {
-    return callDirection == CallDirection.outgoing ? fromNumber : toNumber;
+    return _callDirection == CallDirection.outgoing ? fromNumber : toNumber;
   }
 
   String get callSid {
@@ -288,8 +287,8 @@ class FlutterTwilioVoice {
     return callStartedOn;
   }
 
-  CallDirection getCallDirection() {
-    return callDirection;
+  CallDirection get callDirection {
+    return _callDirection;
   }
 
   CallState _parseCallState(dynamic params) {
@@ -343,7 +342,7 @@ class FlutterTwilioVoice {
         callStartedOn = null;
         callFrom = null;
         callTo = null;
-        callDirection = CallDirection.incoming;
+        _callDirection = CallDirection.incoming;
         callEnded(errorMsg: params["error"]);
         return CallState.call_ended;
       case "unhold":
@@ -383,7 +382,7 @@ class FlutterTwilioVoice {
     if (params['onhold'] != null) onHold = params['onhold'];
 
     if (params["direction"] != null) {
-      callDirection = "incoming" == params["direction"]
+      _callDirection = "incoming" == params["direction"]
           ? CallDirection.incoming
           : CallDirection.outgoing;
     }
