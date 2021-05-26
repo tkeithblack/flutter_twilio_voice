@@ -278,8 +278,8 @@ public class IncomingCallNotificationService extends Service {
                 Log.i(TAG, "Android Version " + Build.VERSION.SDK_INT + ". Launching App to foreground for incoming call.");
                 pluginDisplayedAnswerScreen = false;
                 twSingleton().bringAppToForeground(this);
-                sendCallInviteToActivity(callInvite, notificationId);
             }
+            sendCallInviteToActivity(callInvite, notificationId);
         }
     }
 
