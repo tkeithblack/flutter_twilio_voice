@@ -3,6 +3,7 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:collection/collection.dart';
 
 enum CallState {
   ringing,
@@ -24,14 +25,14 @@ enum CallState {
 }
 enum CallDirection { incoming, outgoing }
 
-enum AudioDeviceType { bluetooth, wired_headset, earpiece, speaker }
+enum AudioDeviceType { bluetooth, wired_headset, earpiece, speaker, unknown }
 
 class AudioDevice {
   AudioDevice();
-  String id;
-  String name;
-  AudioDeviceType type;
-  bool selected;
+  String? id;
+  String? name;
+  AudioDeviceType type = AudioDeviceType.unknown;
+  bool? selected;
 
   factory AudioDevice.fromJson(Map<dynamic, dynamic> json) {
     var audioDevice = AudioDevice()
@@ -73,12 +74,15 @@ class AudioDevice {
       case AudioDeviceType.speaker:
         icon = Icons.volume_up;
         break;
+      case AudioDeviceType.unknown:
+        icon = Icons.phone_in_talk;
+        break;
     }
     return icon;
   }
 
   void printProperties() {
-    print('Name: ${name}, id: ${id}, selected: ${selected}, type: ${type}');
+    print('Name: $name, id: $id, selected: $selected, type: $type');
   }
 }
 
@@ -100,20 +104,20 @@ class FlutterTwilioVoice {
   final EventChannel _eventChannel =
       EventChannel('flutter_twilio_voice/events');
 
-  Stream<CallState> _onCallStateChanged;
-  String callFrom;
-  String callTo;
-  String sid;
-  bool muted;
-  bool onHold;
-  bool speakerOn;
-  bool bluetoothAvailable;
-  var _audioDevices = List<AudioDevice>();
+  Stream<CallState>? _onCallStateChanged;
+  String? callFrom;
+  String? callTo;
+  String? sid;
+  bool muted = false;
+  bool onHold = false;
+  bool speakerOn = false;
+  bool bluetoothAvailable = false;
+  var _audioDevices = <AudioDevice>[];
 
-  int callStartedOn;
+  int? callStartedOn;
   CallDirection _callDirection = CallDirection.incoming;
 
-  Stream<CallState> get onCallStateChanged {
+  Stream<CallState>? get onCallStateChanged {
     if (_onCallStateChanged == null) {
       _onCallStateChanged = _eventChannel
           .receiveBroadcastStream()
@@ -123,23 +127,22 @@ class FlutterTwilioVoice {
   }
 
   Future<bool> tokens(
-      {@required String accessToken, @required String fcmToken}) async {
-    assert(accessToken != null);
-    return _channel.invokeMethod('tokens',
-        <String, dynamic>{"accessToken": accessToken, "fcmToken": fcmToken});
+      {required String accessToken, required String fcmToken}) async {
+    return await _channel.invokeMethod('tokens', <String, dynamic>{
+      "accessToken": accessToken,
+      "fcmToken": fcmToken
+    });
   }
 
   Future<bool> unregister() async {
-    return _channel.invokeMethod('unregister', <String, dynamic>{});
+    return await _channel.invokeMethod('unregister', <String, dynamic>{});
   }
 
   Future<bool> makeCall(
-      {@required String from,
-      @required String to,
-      String toDisplayName,
-      Map<String, dynamic> extraOptions}) async {
-    assert(to != null);
-    assert(from != null);
+      {required String from,
+      required String to,
+      String? toDisplayName,
+      Map<String, dynamic>? extraOptions}) async {
     var options = extraOptions != null ? extraOptions : Map<String, dynamic>();
     options['from'] = from;
     options['to'] = to;
@@ -147,63 +150,58 @@ class FlutterTwilioVoice {
     callFrom = from;
     callTo = to;
     _callDirection = CallDirection.outgoing;
-    return _channel.invokeMethod('makeCall', options);
+    return await _channel.invokeMethod('makeCall', options);
   }
 
   Future<bool> hangUp() async {
-    return _channel.invokeMethod('hangUp', <String, dynamic>{});
+    return await _channel.invokeMethod('hangUp', <String, dynamic>{});
   }
 
   Future<bool> answer() async {
-    return _channel.invokeMethod('answer', <String, dynamic>{});
+    return await _channel.invokeMethod('answer', <String, dynamic>{});
   }
 
   Future<bool> reject() async {
-    return _channel.invokeMethod('reject', <String, dynamic>{});
+    return await _channel.invokeMethod('reject', <String, dynamic>{});
   }
 
   Future<bool> holdCall() async {
-    return _channel.invokeMethod('holdCall', <String, dynamic>{});
+    return await _channel.invokeMethod('holdCall', <String, dynamic>{});
   }
 
   Future<bool> toggleMute() async {
-    return _channel.invokeMethod('muteCall', <String, dynamic>{});
+    return await _channel.invokeMethod('muteCall', <String, dynamic>{});
   }
 
   // This method toggles between the speaker and earpiece (or external selcted device)
   Future<bool> toggleSpeaker(bool speakerIsOn) async {
-    assert(speakerIsOn != null);
-    return _channel.invokeMethod(
+    return await _channel.invokeMethod(
         'toggleSpeaker', <String, dynamic>{"speakerIsOn": speakerIsOn});
   }
 
   // This method selects a specific audio device based on a device ID.
   Future<bool> selectAudioDevice(String deviceID) async {
-    return (deviceID != null)
-        ? _channel.invokeMethod(
-            'selectAudioDevice', <String, dynamic>{"deviceID": deviceID})
-        : false;
+    return await _channel.invokeMethod(
+        'selectAudioDevice', <String, dynamic>{"deviceID": deviceID});
   }
 
   Future<bool> sendDigits(String digits) async {
-    assert(digits != null);
-    return _channel
-        .invokeMethod('sendDigits', <String, dynamic>{"digits": digits});
+    return await _channel.invokeMethod(
+        'sendDigits', <String, dynamic>{"digits": digits});
   }
 
-  Future<bool> isOnCall() {
-    return _channel.invokeMethod('isOnCall', <String, dynamic>{});
+  Future<bool> isOnCall() async {
+    return await _channel.invokeMethod('isOnCall', <String, dynamic>{});
   }
 
-  Future<void> replayCallConnection() {
-    return _channel.invokeMethod('replayCallConnection', <String, dynamic>{});
+  Future<void> replayCallConnection() async {
+    return await _channel.invokeMethod('replayCallConnection', <String, dynamic>{});
   }
 
-  Future<void> refreshAudioRoute() {
+  Future<void>? refreshAudioRoute() async {
     if (Platform.isAndroid) {
-      return _channel.invokeMethod('refreshAudioRoute', <String, dynamic>{});
+      return await _channel.invokeMethod('refreshAudioRoute', <String, dynamic>{});
     }
-    return null;
   }
 
   // Legacy Methods replaced by new version ---------
@@ -223,9 +221,9 @@ class FlutterTwilioVoice {
   }
   // End legacy calls --------------------------------
 
-  DateTime get callStartDate {
+  DateTime? get callStartDate {
     if (callStartedOn != null)
-      return DateTime.fromMillisecondsSinceEpoch(callStartedOn);
+      return DateTime.fromMillisecondsSinceEpoch(callStartedOn!);
 
     return null;
   }
@@ -250,48 +248,45 @@ class FlutterTwilioVoice {
     return _callDirection == CallDirection.outgoing ? fromNumber : toNumber;
   }
 
-  String get callSid {
+  String? get callSid {
     return sid;
   }
 
   bool get isMuted {
-    return muted ?? false;
+    return muted;
   }
 
   bool get isOnHold {
-    return onHold ?? false;
+    return onHold;
   }
 
   bool get isSpeakerOn {
-    return speakerOn ?? false;
+    return speakerOn;
   }
 
   bool get isBluetoothAvailable {
-    return bluetoothAvailable ?? false;
+    return bluetoothAvailable;
   }
 
   bool get isExterenalAudioRouteAvailable {
-    if (_audioDevices != null) {
-      for (var device in _audioDevices) {
-        if (device.type == AudioDeviceType.bluetooth ||
-            device.type == AudioDeviceType.wired_headset) {
-          return true;
-        }
+    for (var device in _audioDevices) {
+      if (device.type == AudioDeviceType.bluetooth ||
+          device.type == AudioDeviceType.wired_headset) {
+        return true;
       }
     }
     return false;
   }
 
-  AudioDevice get selectedAudioDevice {
-    return audioDevices.firstWhere((element) => element.selected == true,
-        orElse: () => null);
+  AudioDevice? get selectedAudioDevice {
+    return audioDevices.firstWhereOrNull((element) => element.selected == true);
   }
 
   List<AudioDevice> get audioDevices {
     return _audioDevices;
   }
 
-  int getCallStartedOn() {
+  int? getCallStartedOn() {
     return callStartedOn;
   }
 
@@ -382,7 +377,7 @@ class FlutterTwilioVoice {
     }
   }
 
-  void _setCallInfoFromParams({Map<dynamic, dynamic> params}) {
+  void _setCallInfoFromParams({required Map<dynamic, dynamic> params}) {
     if (params['from'] != null) callFrom = _prettyPrintNumber(params['from']);
     if (params['to'] != null) callTo = _prettyPrintNumber(params['to']);
     if (params['sid'] != null) sid = params['sid'];
@@ -396,21 +391,19 @@ class FlutterTwilioVoice {
     }
   }
 
-  void _updateAudioRoute({Map<dynamic, dynamic> params}) {
+  void _updateAudioRoute({required Map<dynamic, dynamic> params}) {
     // Update audio devices list.
     _audioDevices.clear();
-    var devices = params['devices'] as List<dynamic>;
+    var devices = params['devices'] as List<dynamic>?;
     if (devices != null) {
       for (var element in devices) {
         var device = AudioDevice.fromJson(element);
-        if (device != null) {
-          _audioDevices.add(device);
-        }
+        _audioDevices.add(device);
       }
     }
 
-    bluetoothAvailable = params["bluetooth_available"];
-    speakerOn = params["speaker_on"];
+    bluetoothAvailable = params["bluetooth_available"] ?? false;
+    speakerOn = params["speaker_on"] ?? false;
     callAudioRouteChanged(
         isBluetoothAvailable: bluetoothAvailable, isSpeaker: speakerOn);
   }
@@ -442,18 +435,19 @@ class FlutterTwilioVoice {
 
   // Notification methods that can be overridden
   void callInvite(
-      {Map<dynamic, dynamic> customParameters,
-      bool replay,
-      bool pluginDisplayedAnswerScreen}) {}
-  void callInviteCancel({String errorMessage}) {}
-  void callReject({Map<dynamic, dynamic> customParameters}) {}
+      {required Map<dynamic, dynamic> customParameters,
+      required bool replay,
+      required bool pluginDisplayedAnswerScreen}) {}
+  void callInviteCancel({String? errorMessage}) {}
+  void callReject({Map<dynamic, dynamic>? customParameters}) {}
   void callDidStartRinging() {}
   void callDidConnect() {}
   void callReconnected() {}
-  void callReconnecting({String errorMsg}) {}
-  void callConnectFailed({String errorMsg}) {}
-  void callEnded({String errorMsg}) {}
-  void callHoldChanged({bool isOnHold}) {}
-  void callMuteChanged({bool isMuted}) {}
-  void callAudioRouteChanged({bool isBluetoothAvailable, bool isSpeaker}) {}
+  void callReconnecting({String? errorMsg}) {}
+  void callConnectFailed({String? errorMsg}) {}
+  void callEnded({String? errorMsg}) {}
+  void callHoldChanged({required bool isOnHold}) {}
+  void callMuteChanged({required bool isMuted}) {}
+  void callAudioRouteChanged(
+      {required bool isBluetoothAvailable, required bool isSpeaker}) {}
 }

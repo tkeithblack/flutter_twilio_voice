@@ -4,9 +4,9 @@ version: 0.0.3+90
 homepage: "https://github.com/markathomas/flutter_twilio_voice"
 
 environment:
-  sdk: ">=2.1.0 <3.0.0"
-  flutter: ">=1.9.1+hotfix.4 <2.0.0"
-
+  sdk: ">=2.13.0 <3.0.0"
+  flutter_sdk: ">=2.2.0"
+  
 dependencies:
   flutter:
     sdk: flutter
