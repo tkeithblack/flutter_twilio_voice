@@ -205,8 +205,13 @@ public class IncomingCallNotificationService extends Service {
     private void accept(CallInvite callInvite, int notificationId) {
         Log.d(TAG, "Inside accept(CallInvite callInvite, int notificationId)");
 
+        boolean running = twSingleton().isAppRunning("com.dormmom.flutter_twilio_voice");
+        Log.d(TAG, "*** IS APP RUNNING = " + running);
+
         answer(callInvite);
+
         endForeground();
+        twSingleton().bringAppToForeground(this);
 
         Intent intent = new Intent(this, BackgroundCallPageActivity.class);
         intent.addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP);
@@ -234,6 +239,8 @@ public class IncomingCallNotificationService extends Service {
         intent.setAction(Constants.ACTION_DECLINED);
         intent.putExtra(Constants.INCOMING_CALL_NOTIFICATION_ID, notificationId);
         intent.putExtra(Constants.INCOMING_CALL_INVITE, callInvite);
+//        intent.addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP);
+//        intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
         LocalBroadcastManager.getInstance(this).sendBroadcast(intent);
 
         callInvite.reject(getApplicationContext());
@@ -270,7 +277,7 @@ public class IncomingCallNotificationService extends Service {
             } else {
                 Log.i(TAG, "Android Version " + Build.VERSION.SDK_INT + ". Launching App to foreground for incoming call.");
                 pluginDisplayedAnswerScreen = false;
-//                twSingleton().bringAppToForeground(this);
+                twSingleton().bringAppToForeground(this);
             }
             sendCallInviteToActivity(callInvite, notificationId);
         }
