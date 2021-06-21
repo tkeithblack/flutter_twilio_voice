@@ -247,16 +247,6 @@ public class TwilioSingleton {
         }
     }
 
-    void bringAppToForeground(Context parent) {
-        Log.d(TAG, "Inside wakePlugin()");
-
-        Intent intent = new Intent();
-        intent.setAction(Constants.ACTION_APP_TO_FOREGROUND);
-        intent.addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP);
-        intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-        parent.startActivity(intent);
-    }
-
     private void sendPhoneCallEvents(HashMap<String, Object> params) {
         if (twilioPlugin != null)
             twilioPlugin.sendPhoneCallEvents(params);
@@ -471,21 +461,6 @@ public class TwilioSingleton {
             return null;
         }
     }
-
-    public  boolean isAppRunning(String packageName) {
-        final ActivityManager activityManager = (ActivityManager) appContext.getSystemService(Context.ACTIVITY_SERVICE);
-        final List<ActivityManager.RunningAppProcessInfo> procInfos = activityManager.getRunningAppProcesses();
-        if (procInfos != null)
-        {
-            for (final ActivityManager.RunningAppProcessInfo processInfo : procInfos) {
-                if (processInfo.processName.equals(packageName)) {
-                    return true;
-                }
-            }
-        }
-        return false;
-    }
-
 
     // Debug functions
     /*
