@@ -571,12 +571,12 @@ public class FlutterTwilioVoicePlugin implements FlutterPlugin, MethodChannel.Me
         this.activity = activityPluginBinding.getActivity();
         activityPluginBinding.addOnNewIntentListener(this);
         registerReceiver();
-        /*
-         * Ensure the microphone permission is enabled
-         */
-        if (!this.checkPermissionForMicrophone()) {
-            this.requestPermissionForMicrophone();
-        }
+//        /*
+//         * Ensure the microphone permission is enabled
+//         */
+//        if (!this.checkPermissionForMicrophone()) {
+//            this.requestPermissionForMicrophone();
+//        }
     }
 
     @Override
