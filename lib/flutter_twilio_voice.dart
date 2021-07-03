@@ -108,10 +108,10 @@ class FlutterTwilioVoice {
   String? callFrom;
   String? callTo;
   String? sid;
-  bool muted = false;
-  bool onHold = false;
-  bool speakerOn = false;
-  bool bluetoothAvailable = false;
+  bool _muted = false;
+  bool _onHold = false;
+  bool _speakerOn = false;
+  bool _bluetoothAvailable = false;
   var _audioDevices = <AudioDevice>[];
 
   int? callStartedOn;
@@ -128,10 +128,8 @@ class FlutterTwilioVoice {
 
   Future<bool> tokens(
       {required String accessToken, required String fcmToken}) async {
-    return await _channel.invokeMethod('tokens', <String, dynamic>{
-      "accessToken": accessToken,
-      "fcmToken": fcmToken
-    });
+    return await _channel.invokeMethod('tokens',
+        <String, dynamic>{"accessToken": accessToken, "fcmToken": fcmToken});
   }
 
   Future<bool> unregister() async {
@@ -186,8 +184,8 @@ class FlutterTwilioVoice {
   }
 
   Future<bool> sendDigits(String digits) async {
-    return await _channel.invokeMethod(
-        'sendDigits', <String, dynamic>{"digits": digits});
+    return await _channel
+        .invokeMethod('sendDigits', <String, dynamic>{"digits": digits});
   }
 
   Future<bool> isOnCall() async {
@@ -195,13 +193,13 @@ class FlutterTwilioVoice {
   }
 
   Future<void> replayCallConnection() async {
-    return await _channel.invokeMethod('replayCallConnection', <String, dynamic>{});
+    return await _channel
+        .invokeMethod('replayCallConnection', <String, dynamic>{});
   }
 
   Future<void>? refreshAudioRoute() async {
-    if (Platform.isAndroid) {
-      return await _channel.invokeMethod('refreshAudioRoute', <String, dynamic>{});
-    }
+    return await _channel
+        .invokeMethod('refreshAudioRoute', <String, dynamic>{});
   }
 
   // Legacy Methods replaced by new version ---------
@@ -253,22 +251,23 @@ class FlutterTwilioVoice {
   }
 
   bool get isMuted {
-    return muted;
+    return _muted;
   }
 
   bool get isOnHold {
-    return onHold;
+    return _onHold;
   }
 
   bool get isSpeakerOn {
-    return speakerOn;
+    return _speakerOn;
   }
 
   bool get isBluetoothAvailable {
-    return bluetoothAvailable;
+    return _bluetoothAvailable;
   }
 
   bool get isExterenalAudioRouteAvailable {
+    print('inside isExterenalAudioRouteAvailable');
     for (var device in _audioDevices) {
       if (device.type == AudioDeviceType.bluetooth ||
           device.type == AudioDeviceType.wired_headset) {
@@ -279,10 +278,12 @@ class FlutterTwilioVoice {
   }
 
   AudioDevice? get selectedAudioDevice {
+    print('inside selectedAudioDevice');
     return audioDevices.firstWhereOrNull((element) => element.selected == true);
   }
 
   List<AudioDevice> get audioDevices {
+    print('inside get audioDevices');
     return _audioDevices;
   }
 
@@ -349,20 +350,20 @@ class FlutterTwilioVoice {
         callEnded(errorMsg: params["error"]);
         return CallState.call_ended;
       case "unhold":
-        onHold = false;
-        callHoldChanged(isOnHold: onHold);
+        _onHold = false;
+        callHoldChanged(isOnHold: _onHold);
         return CallState.unhold;
       case "hold":
-        onHold = true;
-        callHoldChanged(isOnHold: onHold);
+        _onHold = true;
+        callHoldChanged(isOnHold: _onHold);
         return CallState.hold;
       case "unmute":
-        muted = false;
-        callMuteChanged(isMuted: muted);
+        _muted = false;
+        callMuteChanged(isMuted: _muted);
         return CallState.unmute;
       case "mute":
-        muted = true;
-        callMuteChanged(isMuted: muted);
+        _muted = true;
+        callMuteChanged(isMuted: _muted);
         return CallState.mute;
       case "speaker_on":
         return CallState.speaker_on;
@@ -381,8 +382,8 @@ class FlutterTwilioVoice {
     if (params['from'] != null) callFrom = _prettyPrintNumber(params['from']);
     if (params['to'] != null) callTo = _prettyPrintNumber(params['to']);
     if (params['sid'] != null) sid = params['sid'];
-    if (params['muted'] != null) muted = params['muted'];
-    if (params['onhold'] != null) onHold = params['onhold'];
+    if (params['muted'] != null) _muted = params['muted'];
+    if (params['onhold'] != null) _onHold = params['onhold'];
 
     if (params["direction"] != null) {
       _callDirection = "incoming" == params["direction"]
@@ -393,6 +394,11 @@ class FlutterTwilioVoice {
 
   void _updateAudioRoute({required Map<dynamic, dynamic> params}) {
     // Update audio devices list.
+    print('inside _updateAudioRoute(): params = $params');
+
+    print('_updateAudioRoute: clearing _audioDevices, before:');
+    _audioDevices.forEach((element) => element.printProperties());
+
     _audioDevices.clear();
     var devices = params['devices'] as List<dynamic>?;
     if (devices != null) {
@@ -401,11 +407,13 @@ class FlutterTwilioVoice {
         _audioDevices.add(device);
       }
     }
+    print('_updateAudioRoute: updated _audioDevices, after:');
+    _audioDevices.forEach((element) => element.printProperties());
 
-    bluetoothAvailable = params["bluetooth_available"] ?? false;
-    speakerOn = params["speaker_on"] ?? false;
+    _bluetoothAvailable = params["bluetooth_available"] ?? false;
+    _speakerOn = params["speaker_on"] ?? false;
     callAudioRouteChanged(
-        isBluetoothAvailable: bluetoothAvailable, isSpeaker: speakerOn);
+        isBluetoothAvailable: _bluetoothAvailable, isSpeaker: _speakerOn);
   }
 
   String _prettyPrintNumber(String phoneNumber) {

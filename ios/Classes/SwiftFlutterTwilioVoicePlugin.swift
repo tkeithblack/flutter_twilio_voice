@@ -236,6 +236,8 @@ public class SwiftFlutterTwilioVoicePlugin: NSObject, FlutterPlugin,  FlutterStr
             buildAndSendInviteEvent(ci: ci, replay: true)
             sendCallDidConnectEvent(call: call)
         }
+    }    else if flutterCall.method == "refreshAudioRoute" {
+        queryAndSendAudioDeviceInfo()
     }
     result(true)
   }
@@ -303,6 +305,16 @@ public class SwiftFlutterTwilioVoicePlugin: NSObject, FlutterPlugin,  FlutterStr
         }
   }
 
+    func queryAndSendAudioDeviceInfo() -> Void {
+        if let audioDevices = CMAudioUtils.audioDevices(){
+        
+        self.sendPhoneCallEvents(json: ["event": CallState.audio_route_change.rawValue,
+            "bluetooth_available": CMAudioUtils.isBluetoothsAudioInputAvailable(),
+            "speaker_on": CMAudioUtils.isSpeakerOn(),
+            "devices" : CMAudioUtils.audioDevicesToJSON(audioDevices:audioDevices)
+        ])}
+    }
+    
     /* func fetchAccessToken() -> String? {
         let endpointWithIdentity = String(format: "%@?identity=%@", accessTokenEndpoint, identity)
         guard let accessTokenURL = URL(string: baseURLString + endpointWithIdentity) else {
@@ -314,15 +326,15 @@ public class SwiftFlutterTwilioVoicePlugin: NSObject, FlutterPlugin,  FlutterStr
 
     func checkRecordPermission(completion: @escaping (_ permissionGranted: Bool) -> Void) {
         switch AVAudioSession.sharedInstance().recordPermission {
-        case AVAudioSessionRecordPermission.granted:
+            case AVAudioSession.RecordPermission.granted:
             // Record permission already granted.
             completion(true)
             break
-        case AVAudioSessionRecordPermission.denied:
+            case AVAudioSession.RecordPermission.denied:
             // Record permission denied.
             completion(false)
             break
-        case AVAudioSessionRecordPermission.undetermined:
+            case AVAudioSession.RecordPermission.undetermined:
             // Requesting record permission.
             // Optional: pop up app dialog to let the users know if they want to request.
             AVAudioSession.sharedInstance().requestRecordPermission({ (granted) in
@@ -901,14 +913,7 @@ public class SwiftFlutterTwilioVoicePlugin: NSObject, FlutterPlugin,  FlutterStr
                  AVAudioSession.RouteChangeReason.newDeviceAvailable.rawValue:
                 
                 DispatchQueue.main.async(execute: { () -> Void in
-                    
-                    let audioDevices = CMAudioUtils.audioDevices()
-                    
-                    self.sendPhoneCallEvents(json: ["event": CallState.audio_route_change.rawValue, 
-                        "bluetooth_available": CMAudioUtils.isBluetoothsAudioInputAvailable(), 
-                        "speaker_on": CMAudioUtils.isSpeakerOn(),
-                        "devices" : CMAudioUtils.audioDevicesToJSON(audioDevices:audioDevices)
-                    ])
+                    self.queryAndSendAudioDeviceInfo()
                 })
                 break
             default:

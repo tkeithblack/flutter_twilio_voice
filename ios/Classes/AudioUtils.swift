@@ -41,7 +41,7 @@ class CMAudioUtils {
                 print(input)
                 if input.portType == AVAudioSession.Port.bluetoothHFP
                 {
-                    print("============= Yo, I found a bluethooth audio device!")
+                    print("============= Yo, I found a bluethooth audio device! Inside isBluetoothsAudioInputAvailable()")
                     return true
                 }
             }
@@ -101,6 +101,7 @@ class CMAudioUtils {
     }
     
     public static func selectAudioDevice(deviceID: String) {
+        print(">>> selectAudioDevice deviceID = \(deviceID)")
         
         let session = AVAudioSession.sharedInstance()
         let audioDevices = CMAudioUtils.audioDevices()
@@ -164,7 +165,7 @@ class CMAudioUtils {
 //                        devices.append(CMAudioDevice(id: input.uid, name: input.portName, type: CMAudioDeviceType.earpiece, selected: input.uid == currentDeviceUid, portDescription: input))
 //                        print("============= Yo, I found a headset - \(input.portName)!")
                     default:
-                        print("*** Non-listed routes - \(input.portName)!")
+                        print("*** Non-listed routes - uid: \(input.uid), portName: \(input.portName), description: \(input)!")
                         break;
                 }
             }
