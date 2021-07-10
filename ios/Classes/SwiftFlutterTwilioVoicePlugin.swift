@@ -244,7 +244,7 @@ public class SwiftFlutterTwilioVoicePlugin: NSObject, FlutterPlugin,  FlutterStr
 
     var connected : Bool {
         get {
-            NSLog("*** TwilioTrace get connected: call = \(String(describing: call)), call.state = \(String(describing: call?.state.rawValue)) ")
+//            NSLog("*** TwilioTrace get connected: call = \(String(describing: call)), call.state = \(String(describing: call?.state.rawValue)) ")
             if let call = self.call, call.state == TVOCallState.connected {
                 return true
             }
