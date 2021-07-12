@@ -263,6 +263,7 @@ public class IncomingCallNotificationService extends Service {
         Log.d(TAG, "handleCancelledCall: " + intent);
         endForeground();
         LocalBroadcastManager.getInstance(this).sendBroadcast(intent);
+        SoundManager.getInstance(getApplicationContext()).stopRinging();
     }
 
     private void handleIncomingCall(CallInvite callInvite, int notificationId) {

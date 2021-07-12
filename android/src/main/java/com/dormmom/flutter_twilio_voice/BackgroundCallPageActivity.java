@@ -30,7 +30,7 @@ import android.view.WindowManager.LayoutParams;
 
 public class BackgroundCallPageActivity extends AppCompatActivity implements SensorEventListener {
 
-    private static String TAG = "IncomingCallPageActivity";
+    private static String TAG = "BackgroundCallPageActivity";
     public static final String TwilioPreferences = "mx.TwilioPreferences";
     TwilioSingleton twSingleton() {
         return TwilioSingleton.getInstance(getApplicationContext());
