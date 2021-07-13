@@ -234,6 +234,7 @@ public class IncomingCallNotificationService extends Service {
         Log.d(TAG, "Inside reject(CallInvite callInvite)");
         SoundManager.getInstance(getApplicationContext()).stopRinging();
         endForeground();
+        twSingleton().decrementActiveInviteCount();
 
         Intent intent = new Intent();
         intent.setAction(Constants.ACTION_DECLINED);
@@ -261,6 +262,7 @@ public class IncomingCallNotificationService extends Service {
 
     private void handleCancelledCall(Intent intent) {
         Log.d(TAG, "handleCancelledCall: " + intent);
+        twSingleton().decrementActiveInviteCount();
         endForeground();
         LocalBroadcastManager.getInstance(this).sendBroadcast(intent);
         SoundManager.getInstance(getApplicationContext()).stopRinging();

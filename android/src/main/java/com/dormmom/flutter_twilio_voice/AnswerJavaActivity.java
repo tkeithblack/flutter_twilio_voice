@@ -243,22 +243,23 @@ public class AnswerJavaActivity extends AppCompatActivity {
         acceptIntent.putExtra(Constants.INCOMING_CALL_NOTIFICATION_ID, activeCallNotificationId);
         Log.d(TAG, "Clicked accept startService");
         startService(acceptIntent);
-        finish();
+        finishAndRemoveTask();
     }
 
     private void newCancelCallClickListener(Intent intent) {
         Log.d(TAG, "Canceled call");
-        finish();
+        finishAndRemoveTask();
     }
 
     private void rejectCallClickListener() {
         Log.d(TAG, "Reject Call Click listener");
+        twSingleton().decrementActiveInviteCount();
         if (activeCallInvite != null) {
             Intent rejectIntent = new Intent(this, IncomingCallNotificationService.class);
             rejectIntent.setAction(Constants.ACTION_REJECT);
             rejectIntent.putExtra(Constants.INCOMING_CALL_INVITE, activeCallInvite);
             startService(rejectIntent);
-            finish();
+            finishAndRemoveTask();
         }
     }
 
@@ -303,5 +304,4 @@ public class AnswerJavaActivity extends AppCompatActivity {
             wakeLock.release();
         }
     }
-
 }
