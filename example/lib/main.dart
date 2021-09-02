@@ -56,12 +56,13 @@ class _MyAppState extends State<MyApp> {
               SizedBox(
                 height: 10,
               ),
-              RaisedButton(
+              ElevatedButton(
                 child: Text("Make Call"),
                 onPressed: () async {
-                  FlutterTwilioVoice.onCallStateChanged
+                  FlutterTwilioVoice()
+                      .onCallStateChanged
                       .listen(_onEvent, onError: _onError);
-                  FlutterTwilioVoice.makeCall(
+                  FlutterTwilioVoice().makeCall(
                       to: _controller.text,
                       from: "5551234567",
                       toDisplayName: "James Bond");

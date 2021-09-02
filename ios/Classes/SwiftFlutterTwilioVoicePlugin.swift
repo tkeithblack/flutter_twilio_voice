@@ -216,7 +216,7 @@ public class SwiftFlutterTwilioVoicePlugin: NSObject, FlutterPlugin,  FlutterStr
     }
     else if flutterCall.method == "hangUp"
     {
-        if (self.call != nil && self.call?.state == .connected) {
+        if (connected) {
             NSLog("hangUp method invoked")
             self.userInitiatedDisconnect = true
             performEndCallAction(uuid: self.call!.uuid)
@@ -254,7 +254,7 @@ public class SwiftFlutterTwilioVoicePlugin: NSObject, FlutterPlugin,  FlutterStr
     
   func makeCall(to: String, displayName: String)
   {
-        if (self.call != nil && self.call?.state == .connected) {
+        if (connected) {
             self.userInitiatedDisconnect = true
             performEndCallAction(uuid: self.call!.uuid)
             //self.toggleUIState(isEnabled: false, showCallControl: false)
@@ -472,6 +472,17 @@ public class SwiftFlutterTwilioVoicePlugin: NSObject, FlutterPlugin,  FlutterStr
         let from:String = inviteParamCallerId ?? "Voice Bot"
         
         reportIncomingCall(from: from, uuid: ci.uuid)
+        
+        if (self.callInvite != nil) {
+            NSLog("Already a pending call invite. Ignoring incoming call invite from \(String(describing: callInvite?.from))")
+            self.incomingPushHandled()
+            return
+        } else if (self.call != nil) {
+            NSLog("Already an active call. Ignoring incoming call invite from \(String(describing: callInvite?.from))");
+            self.incomingPushHandled()
+            return;
+        }
+        
         self.callInvite = ci
         updateCallerIdFromContacts(number: number, name: name)
                 
@@ -700,12 +711,12 @@ public class SwiftFlutterTwilioVoicePlugin: NSObject, FlutterPlugin,  FlutterStr
         }
 
         public func provider(_ provider: CXProvider, perform action: CXEndCallAction) {
-            NSLog("provider:performEndCallAction:")
+            NSLog("provider:perform action: CXEndCallAction:")
 
             audioDevice.isEnabled = true
 
             if (self.call != nil) {
-                NSLog("provider:performEndCallAction: disconnecting call")
+                NSLog("provider:CXEndCallAction: disconnecting call")
                 self.call?.disconnect()
                 //self.callInvite = nil
                 //self.call = nil
