@@ -647,48 +647,47 @@ public class SwiftFlutterTwilioVoicePlugin: NSObject, FlutterPlugin,  FlutterStr
         * Newly raised warnings = currentWarnings - intersection = { A }
         * Newly cleared warnings = previousWarnings - intersection = { C }
         */
+        
+        dLog("Inside call:didReceiveQualityWarnings: current warnings: \(currentWarnings)")
+
         var warningsIntersection: Set<NSNumber> = currentWarnings
         warningsIntersection = warningsIntersection.intersection(previousWarnings)
         
         var newWarnings: Set<NSNumber> = currentWarnings
         newWarnings.subtract(warningsIntersection)
+        
         if newWarnings.count > 0 {
-            sendPhoneCallWarningEvent(newWarnings, isCleared: false)
+            dLog("New Quality Warnings: \(newWarnings)")
         }
         
         var clearedWarnings: Set<NSNumber> = previousWarnings
         clearedWarnings.subtract(warningsIntersection)
         if clearedWarnings.count > 0 {
-            sendPhoneCallWarningEvent(clearedWarnings, isCleared: true)
+            dLog("Cleared Quality Warnings: \(clearedWarnings)")
         }
+        sendPhoneCallWarningEvent(currentWarnings)
     }
     
-    func sendPhoneCallWarningEvent(_ warnings: Set<NSNumber>, isCleared: Bool) {
-        var warningMessage: String = "Warnings detected: "
-        if isCleared {
-            warningMessage = "Warnings cleared: "
-        }
-        
+    func sendPhoneCallWarningEvent(_ warnings: Set<NSNumber>) {
+        var warningMessage: String = ""
         let mappedWarnings: [String] = warnings.map { number in warningString(Call.QualityWarning(rawValue: number.uintValue)!)}
         warningMessage += mappedWarnings.joined(separator: ", ")
         
-        let warningInfo:[String : Any] = ["event": CallState.call_quality_warning.rawValue, "warning": warningMessage, "isCleared": isCleared];
+        let warningInfo:[String : Any] = ["event": CallState.call_quality_warning.rawValue, "warning": warningMessage, "isCleared": warnings.isEmpty];
         sendPhoneCallEvents(json: warningInfo)
     }
     
     func warningString(_ warning: Call.QualityWarning) -> String {
         switch warning {
-        case .highRtt: return "high-rtt"
-        case .highJitter: return "high-jitter"
-        case .highPacketsLostFraction: return "high-packets-lost-fraction"
-        case .lowMos: return "low-mos"
-        case .constantAudioInputLevel: return "constant-audio-input-level"
+        case .highRtt: return "Round Trip Time"
+        case .highJitter: return "Jitter"
+        case .highPacketsLostFraction: return "Packet Loss"
+        case .lowMos: return "Low Call Quality"
+        case .constantAudioInputLevel: return "Audio Level"
         default: return "Unknown warning"
         }
     }
     
-    
-
         // MARK: AVAudioSession
         func toggleAudioRoute(toSpeaker: Bool) {
             // The mode set by the Voice SDK is "VoiceChat" so the default audio route is the built-in receiver. Use port override to switch the route.
@@ -1007,7 +1006,20 @@ public class SwiftFlutterTwilioVoicePlugin: NSObject, FlutterPlugin,  FlutterStr
 
         // MARK: AV Functions (microphone handling)
 
+    var sendWarningCount = 0;
     @objc func audioRouteChanged(_ notification:Notification) {
+                
+        //--------------------------------------------
+        // SEND TEST QUALITY WARNING MESSAGES
+//        if let actCall = activeCall {
+//            sendWarningCount+=1
+//            if sendWarningCount % 2 == 0 {
+//                call(call: actCall, didReceiveQualityWarnings: [0, 1, 2, 3, 4], previousWarnings: [])
+//            } else {
+//                call(call: actCall, didReceiveQualityWarnings: [], previousWarnings: [0, 1, 2])
+//            }
+//        }
+        //--------------------------------------------
 
         if let userInfo = notification.userInfo {
             let reason = userInfo[AVAudioSessionRouteChangeReasonKey] as! UInt
