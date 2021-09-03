@@ -21,7 +21,8 @@ enum CallState {
   mute,
   speaker_on,
   speaker_off,
-  audio_route_change
+  audio_route_change,
+  call_quality_warning
 }
 enum CallDirection { incoming, outgoing }
 
@@ -372,6 +373,10 @@ class FlutterTwilioVoice {
       case "audio_route_change":
         _updateAudioRoute(params: params);
         return CallState.audio_route_change;
+      case "call_quality_warning":
+        callQualityWarning(
+            warning: params["warning"], isCleared: params['isCleared']);
+        return CallState.call_quality_warning;
       default:
         print('$state is not a valid CallState.');
         throw ArgumentError('$state is not a valid CallState.');
@@ -456,6 +461,7 @@ class FlutterTwilioVoice {
   void callEnded({String? errorMsg}) {}
   void callHoldChanged({required bool isOnHold}) {}
   void callMuteChanged({required bool isMuted}) {}
+  void callQualityWarning({required String warning, required bool isCleared}) {}
   void callAudioRouteChanged(
       {required bool isBluetoothAvailable, required bool isSpeaker}) {}
 }
