@@ -50,7 +50,7 @@ import java.util.Map;
 
 enum CallState {
     ringing, connected, reconnecting, reconnected, connect_failed, call_invite, call_invite_canceled, call_reject, call_ended,
-    unhold, hold, unmute, mute, speaker_on, speaker_off, audio_route_change
+    unhold, hold, unmute, mute, speaker_on, speaker_off, audio_route_change, call_quality_warning
 }
 
 enum CallDirection {

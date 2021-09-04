@@ -12,8 +12,11 @@ import com.twilio.voice.CallInvite;
 import java.util.ArrayList;
 import java.util.Date;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
+import java.util.Set;
 
 import android.app.ActivityManager;
 import android.content.ContentResolver;
@@ -179,7 +182,83 @@ public class TwilioSingleton {
                 outgoingFromNumber = null;
                 outgoingToNumber = null;
             }
+
+            /*
+             * currentWarnings: existing quality warnings that have not been cleared yet
+             * previousWarnings: last set of warnings prior to receiving this callback
+             *
+             * Example:
+             *   - currentWarnings: { A, B }
+             *   - previousWarnings: { B, C }
+             *
+             * Newly raised warnings = currentWarnings - intersection = { A }
+             * Newly cleared warnings = previousWarnings - intersection = { C }
+             */
+            public void onCallQualityWarningsChanged(@NonNull Call call,
+                                                     @NonNull Set<Call.CallQualityWarning> currentWarnings,
+                                                     @NonNull Set<Call.CallQualityWarning> previousWarnings) {
+
+                if (previousWarnings.size() > 1) {
+                    Set<Call.CallQualityWarning> intersection = new HashSet<>(currentWarnings);
+                    currentWarnings.removeAll(previousWarnings);
+                    intersection.retainAll(previousWarnings);
+                    previousWarnings.removeAll(intersection);
+                }
+
+                String message = String.format(
+                        Locale.US,
+                        "Newly raised warnings: " + currentWarnings + " Clear warnings " + previousWarnings);
+                Log.d(TAG, "Quality Warning Changed: " + message);
+
+                String warningString = warningString(currentWarnings);
+
+                HashMap<String, Object> params = callToParams(call);
+                params.put("event", CallState.call_quality_warning.name());
+                params.put("warning", warningString);
+                params.put("isCleared", warningString.isEmpty());
+                sendPhoneCallEvents(params);
+
+                Log.e(TAG, message);
+            }
         };
+    }
+
+    String warningString(Set<Call.CallQualityWarning> warnings)  {
+
+        String warningString = "";
+
+        for (Call.CallQualityWarning warning : warnings) {
+            switch (warning) {
+                case WARN_HIGH_RTT:
+                    if (!warningString.isEmpty())
+                        warningString += ", ";
+                    warningString += "Round Trip Time";
+                    break;
+                case WARN_HIGH_JITTER:
+                    if (!warningString.isEmpty())
+                        warningString += ", ";
+                    warningString +=  "Jitter";
+                    break;
+                case WARN_HIGH_PACKET_LOSS:
+                    if (!warningString.isEmpty())
+                        warningString += ", ";
+                    warningString += "Packet Loss";
+                    break;
+                case WARN_LOW_MOS:
+                    if (!warningString.isEmpty())
+                        warningString += ", ";
+                    warningString += "Low Call Quality";
+                    break;
+                case WARN_CONSTANT_AUDIO_IN_LEVEL:
+                    if (!warningString.isEmpty())
+                        warningString += ", ";
+                    warningString += "Audio Level";
+                    break;
+                default:
+                    break;
+            }
+        }
+        return warningString;
     }
 
     void handleCallConnect(Call call) {
