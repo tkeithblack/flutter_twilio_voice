@@ -102,9 +102,9 @@ public class FlutterTwilioVoicePlugin implements FlutterPlugin, MethodChannel.Me
     }
 
     @Override
-    public void onAttachedToEngine(FlutterPluginBinding flutterPluginBinding) {
+    public void onAttachedToEngine(FlutterPluginBinding binding) {
         Log.i(TAG, "onAttachedToEngine()");
-        register(flutterPluginBinding.getFlutterEngine().getDartExecutor(), this, flutterPluginBinding.getApplicationContext());
+        register(binding.getBinaryMessenger(), this, binding.getApplicationContext());
     }
 
     private static void register(BinaryMessenger messenger, FlutterTwilioVoicePlugin plugin, Context context) {

@@ -43,7 +43,7 @@ import kotlin.Unit;
 // This solution moves Call.Listener() and other resources such as audioSwitch processing
 // to this Singleton. This way these resources are available even if FlutterTwilioVoicePlugin is not.
 // As soon as FlutterTwilioVoicePlugin is instantiated it registers with
-// TwilioSingleton.registerPlugin() and at that time the singleton will begin forwarding
+// TwilioSingleton.registerPlugin() a nd at that time the singleton will begin forwarding
 // all call progress on to the App via FlutterTwilioVoicePlugin.
 
 public class TwilioSingleton {
