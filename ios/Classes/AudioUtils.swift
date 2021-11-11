@@ -113,7 +113,7 @@ class CMAudioUtils {
                     try session.setOutputDataSource(nil)
                     print("Manually setting output to Earpiece")
                 } catch {
-                    print("ERROR: Faield Manually setting output to Earpiece")
+                    print("ERROR: Failed Manually setting output to Earpiece")
                 }
                 return
             } else if device.id == "Speaker" {
