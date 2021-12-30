@@ -88,31 +88,12 @@ public class IncomingCallNotificationService extends Service {
         String appName = getApplicationName(context) + " Incoming Call";
         String notificationText = getCallNotificationText(callInvite);
 
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            Log.d(TAG, "calling buildNotification() - Build.VERSION.SDK_INT (" + Build.VERSION.SDK_INT +  ") >= Build.VERSION_CODES.O ("  + Build.VERSION_CODES.O +  ")");
-
-            return buildNotification(context, appName, notificationText,
-              pendingIntent,
-              extras,
-              callInvite,
-              notificationId,
-              createChannel(channelImportance));
-        } else {
-            Log.d(TAG, "calling NotificationCompat.Builder - NOT: Build.VERSION.SDK_INT (" + Build.VERSION.SDK_INT +  ") >= Build.VERSION_CODES.O ("  + Build.VERSION_CODES.O +  ")");
-            //noinspection deprecation
-            return new NotificationCompat.Builder(this)
-                    .setSmallIcon(R.drawable.ic_call_end_white_24dp)
-                    .setContentTitle(getApplicationName(context))
-                    .setContentText(notificationText)
-                    .setCategory(Notification.CATEGORY_CALL)
-                    .setFullScreenIntent(pendingIntent, true)
-                    .setAutoCancel(true)
-                    .setExtras(extras)
-                    .setContentIntent(pendingIntent)
-                    .setGroup(appName)
-                    .setPriority(NotificationCompat.PRIORITY_MAX)
-                    .setColor(Color.rgb(214, 10, 37)).build();
-        }
+        return buildNotification(context, appName, notificationText,
+          pendingIntent,
+          extras,
+          callInvite,
+          notificationId,
+          createChannel(channelImportance));
     }
 
     /**
@@ -123,7 +104,6 @@ public class IncomingCallNotificationService extends Service {
      * @param extras        extras passed with the notification
      * @return the builder
      */
-    @TargetApi(Build.VERSION_CODES.O)
     private Notification buildNotification(Context context, String title, String text, PendingIntent pendingIntent, Bundle extras,
       final CallInvite callInvite,
       int notificationId,
@@ -182,7 +162,6 @@ public class IncomingCallNotificationService extends Service {
         return callerId;
     }
 
-    @TargetApi(Build.VERSION_CODES.O)
     private String createChannel(int channelImportance) {
         NotificationChannel callInviteChannel = new NotificationChannel(Constants.VOICE_CHANNEL_HIGH_IMPORTANCE,
           "Primary Voice Channel", NotificationManager.IMPORTANCE_HIGH);
@@ -290,7 +269,6 @@ public class IncomingCallNotificationService extends Service {
         stopForeground(true);
     }
 
-    @TargetApi(Build.VERSION_CODES.O)
     private void setCallInProgressNotification(CallInvite callInvite, int notificationId) {
         if (isAppVisible()) {
             Log.i(TAG, "setCallInProgressNotification - app is visible.");

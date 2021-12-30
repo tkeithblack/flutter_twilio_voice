@@ -188,7 +188,6 @@ public class FlutterTwilioVoicePlugin implements FlutterPlugin, MethodChannel.Me
 
     void sendIncomingCallInfo(@NonNull CallInvite callInvite, int notificationId, boolean replay) {
             Log.d(TAG, "Processing call callInvite: " + callInvite);
-//            showWhenInBackground();
 
             HashMap<String, Object> params = paramsFromCallInvite(callInvite, CallState.call_invite);
             if (replay) {
