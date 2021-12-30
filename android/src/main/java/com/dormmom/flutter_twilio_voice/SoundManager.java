@@ -7,7 +7,8 @@ import android.media.RingtoneManager;
 import android.net.Uri;
 import android.os.Build;
 import android.os.VibrationEffect;
-import android.os.VibratorManager;
+// TODO: Uncomment after skd 31
+//import android.os.VibratorManager;
 import android.os.Vibrator;
 import android.provider.Settings;
 import android.util.Log;
