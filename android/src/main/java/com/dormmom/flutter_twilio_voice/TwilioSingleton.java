@@ -18,14 +18,21 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 
+import android.app.Activity;
 import android.app.ActivityManager;
+import android.app.KeyguardManager;
 import android.content.ContentResolver;
 import android.content.Context;
 import android.content.Intent;
 import android.database.Cursor;
 import android.net.Uri;
+import android.os.Build;
 import android.provider.ContactsContract;
 import android.util.Log;
+import android.view.View;
+import android.view.WindowInsets;
+import android.view.WindowInsetsController;
+import android.view.WindowManager;
 
 import org.jetbrains.annotations.NotNull;
 
@@ -334,6 +341,27 @@ public class TwilioSingleton {
         intent.addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP);
         intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
         parent.startActivity(intent);
+    }
+
+    void displayScreenIfUnderKeylock(Activity activity) {
+        KeyguardManager kgm = (KeyguardManager) appContext.getSystemService(Context.KEYGUARD_SERVICE);
+        boolean isKeyguardUp = kgm.isKeyguardLocked();
+        Log.d(TAG, "isKeyguardUp = " + isKeyguardUp);
+
+        if (isKeyguardUp) {
+
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O_MR1) {
+                activity.setTurnScreenOn(true);
+                activity.setShowWhenLocked(true);
+                kgm.requestDismissKeyguard(activity, null);
+                activity.getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
+            } else {
+                activity.getWindow().addFlags(
+                        WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON |
+                        WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED |
+                        WindowManager.LayoutParams.FLAG_TURN_SCREEN_ON);
+            }
+        }
     }
 
     private void sendPhoneCallEvents(HashMap<String, Object> params) {

@@ -26,6 +26,7 @@ import android.content.Intent;
 import android.content.IntentFilter;
 import android.content.pm.PackageManager;
 import android.media.AudioManager;
+import android.os.Build;
 import android.os.PowerManager;
 import android.util.Log;
 import android.view.Window;
@@ -253,25 +254,7 @@ public class FlutterTwilioVoicePlugin implements FlutterPlugin, MethodChannel.Me
         Log.d(TAG, "Inside showWhenInBackground()");
         if (activity == null) return;
 
-        // These flags ensure that the activity can be launched when the screen is locked.
-        Window window = activity.getWindow();
-
-        window.addFlags(WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED |
-//                WindowManager.LayoutParams.FLAG_FULLSCREEN |
-                        WindowManager.LayoutParams.FLAG_DISMISS_KEYGUARD |
-                        WindowManager.LayoutParams.FLAG_TURN_SCREEN_ON |
-                        WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
-
-        // to wake up screen
-        PowerManager pm = (PowerManager) context.getSystemService(Context.POWER_SERVICE);
-
-        PowerManager.WakeLock wakeLock = pm.newWakeLock((PowerManager.FULL_WAKE_LOCK), "flutter.twilio.wakelock:TAG");
-        wakeLock.acquire();
-
-        // to release screen lock
-        KeyguardManager keyguardManager = (KeyguardManager) context.getSystemService(Context.KEYGUARD_SERVICE);
-        KeyguardManager.KeyguardLock keyguardLock = keyguardManager.newKeyguardLock("flutter.twilio.wakelock:TAG");
-        keyguardLock.disableKeyguard();
+        twSingleton().displayScreenIfUnderKeylock(activity);
     }
 
     private void registerReceiver() {
@@ -474,7 +457,7 @@ public class FlutterTwilioVoicePlugin implements FlutterPlugin, MethodChannel.Me
             params.put("To", call.argument("to").toString());
             params.put("From", call.argument("from").toString());
 
-            Map<String, String> arguments = (Map<String, String>)call.arguments;
+            @SuppressWarnings("unchecked") Map<String, String> arguments = (Map<String, String>)call.arguments;
             // Add optional parameters.
             for (Map.Entry<String,String> entry : arguments.entrySet()) {
                 String key =  entry.getKey();

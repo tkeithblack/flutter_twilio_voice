@@ -10,12 +10,13 @@ import android.content.Context;
 import android.content.Intent;
 import android.content.pm.ApplicationInfo;
 import android.graphics.Color;
+import android.graphics.drawable.Icon;
 import android.os.Build;
 import android.os.Bundle;
 import android.os.IBinder;
 import android.util.Log;
 
-import androidx.core.app.NotificationCompat;
+import androidx.core.content.ContextCompat;
 import androidx.lifecycle.Lifecycle;
 import androidx.lifecycle.ProcessLifecycleOwner;
 import androidx.localbroadcastmanager.content.LocalBroadcastManager;
@@ -120,15 +121,19 @@ public class IncomingCallNotificationService extends Service {
         acceptIntent.setAction(Constants.ACTION_ACCEPT);
         acceptIntent.putExtra(Constants.INCOMING_CALL_INVITE, callInvite);
         acceptIntent.putExtra(Constants.INCOMING_CALL_NOTIFICATION_ID, notificationId);
+
+        Icon answerIcon = (Icon) Icon.createWithResource(context, R.drawable.ic_answer);
+        Icon rejectIcon = (Icon) Icon.createWithResource(context, R.drawable.decline_button);
+
         PendingIntent piAcceptIntent = PendingIntent.getService(getApplicationContext(), 0, acceptIntent, PendingIntent.FLAG_UPDATE_CURRENT);
-        Notification.Action rejectAction = new Notification.Action.Builder(android.R.drawable.ic_menu_delete,getString(R.string.decline),piRejectIntent).build();
-        Notification.Action answerAction = new Notification.Action.Builder(android.R.drawable.ic_menu_call, getString(R.string.answer), piAcceptIntent).build();
+        Notification.Action rejectAction = new Notification.Action.Builder(rejectIcon, getString(R.string.decline),piRejectIntent).build();
+        Notification.Action answerAction = new Notification.Action.Builder(answerIcon, getString(R.string.answer), piAcceptIntent).build();
 
         Notification.Builder builder =
           new Notification.Builder(context, channelId)
                   .setSmallIcon(R.mipmap.app_icon_white)
-//                  .setColorized(true)
-//                  .setColor(ContextCompat.getColor(context, R.color.design_default_color_primary))
+                  .setColorized(true)
+                  .setColor(ContextCompat.getColor(context, R.color.design_default_color_primary))
                   .setContentTitle(title)
                   .setContentText(text)
                   .setCategory(Notification.CATEGORY_CALL)
@@ -137,8 +142,6 @@ public class IncomingCallNotificationService extends Service {
                   .setExtras(extras)
                   .setAutoCancel(true)
                   .setVisibility(Notification.VISIBILITY_PUBLIC)
-                  .setLights(Color.GREEN, 3000, 3000)
-                  .setSound(null)
                   .addAction(rejectAction)
                   .addAction(answerAction);
 

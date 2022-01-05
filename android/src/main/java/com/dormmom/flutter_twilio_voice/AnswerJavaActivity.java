@@ -1,6 +1,7 @@
 package com.dormmom.flutter_twilio_voice;
 
 import android.Manifest;
+import android.app.Activity;
 import android.app.KeyguardManager;
 import android.content.BroadcastReceiver;
 import android.content.Context;
@@ -66,30 +67,8 @@ public class AnswerJavaActivity extends AppCompatActivity {
         btnAnswer = (ImageView) findViewById(R.id.btnAnswer);
         btnReject = (ImageView) findViewById(R.id.btnReject);
 
-        KeyguardManager kgm = (KeyguardManager) getSystemService(Context.KEYGUARD_SERVICE);
-        boolean isKeyguardUp = kgm.inKeyguardRestrictedInputMode();
-        Log.d(TAG, "isKeyguardUp = " + isKeyguardUp);
+        twSingleton().displayScreenIfUnderKeylock(this);
 
-        if (isKeyguardUp) {
-
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O_MR1) {
-                setTurnScreenOn(true);
-                setShowWhenLocked(true);
-                kgm.requestDismissKeyguard(this, null);
-            } else {
-                PowerManager pm = (PowerManager) getSystemService(Context.POWER_SERVICE);
-                wakeLock = pm.newWakeLock(PowerManager.FULL_WAKE_LOCK, TAG);
-                wakeLock.acquire(60 * 1000L /*10 minutes*/);
-
-                getWindow().addFlags(
-                        WindowManager.LayoutParams.FLAG_FULLSCREEN |
-                                WindowManager.LayoutParams.FLAG_DISMISS_KEYGUARD |
-                                WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED |
-                                WindowManager.LayoutParams.FLAG_TURN_SCREEN_ON
-                );
-            }
-
-        }
         handleIncomingCallIntent(getIntent());
     }
 

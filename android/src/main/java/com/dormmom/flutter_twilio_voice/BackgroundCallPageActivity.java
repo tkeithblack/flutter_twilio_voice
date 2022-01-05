@@ -82,37 +82,13 @@ public class BackgroundCallPageActivity extends AppCompatActivity implements Sen
         btnHangUp = (ImageView) findViewById(R.id.btnHangUp);
         btnMore = (ImageView) findViewById(R.id.btnMore);
 
-        KeyguardManager kgm = (KeyguardManager) getSystemService(Context.KEYGUARD_SERVICE);
-        Boolean isKeyguardUp = kgm.isKeyguardLocked();
-
         PowerManager powerManager = (PowerManager) getSystemService(Context.POWER_SERVICE);
         try {
             field = PowerManager.class.getField("PROXIMITY_SCREEN_OFF_WAKE_LOCK").getInt(null);
         } catch (Throwable ignored) {}
         this.wakeLock = powerManager.newWakeLock(field, "AllSensors::Wakelock");
 
-        Log.d(TAG, "isKeyguardUp = " + isKeyguardUp);
-        if (isKeyguardUp) {
-
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O_MR1) {
-                Log.d(TAG, "ohh shiny phone!");
-                setTurnScreenOn(true);
-                setShowWhenLocked(true);
-                kgm.requestDismissKeyguard(this, null);
-            }else{
-//                Log.d(TAG, "diego's old phone!");
-//                PowerManager pm = (PowerManager) getSystemService(Context.POWER_SERVICE);
-//                wakeLock = pm.newWakeLock(PowerManager.FULL_WAKE_LOCK, TAG);
-//                wakeLock.acquire(10*60*1000L /*10 minutes*/);
-
-                getWindow().addFlags(
-                        WindowManager.LayoutParams.FLAG_FULLSCREEN |
-                        WindowManager.LayoutParams.FLAG_DISMISS_KEYGUARD |
-                        WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED |
-                        WindowManager.LayoutParams.FLAG_TURN_SCREEN_ON
-                );
-            }
-        }
+        twSingleton().displayScreenIfUnderKeylock(this);
 
         notificationManager = (NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE);
 
