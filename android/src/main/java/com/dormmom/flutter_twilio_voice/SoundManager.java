@@ -33,19 +33,19 @@ public class SoundManager {
         volume = audioManager.getStreamVolume(AudioManager.STREAM_RING);
         appContext = context;
 
-        if (Build.VERSION.SDK_INT > Build.VERSION_CODES.R) {
-            // TODO: Uncomment the following once supporting sdk 31
-            if (BuildConfig.DEBUG) {
-                throw new AssertionError("Need to uncomment code, we're running sdk 31 or greater!");
-            }
+//        if (Build.VERSION.SDK_INT > Build.VERSION_CODES.R) {
+//            // TODO: Uncomment the following once supporting sdk 31
+//            if (BuildConfig.DEBUG) {
+//                throw new AssertionError("Need to uncomment code, we're running sdk 31 or greater!");
+//            }
 //            VibratorManager vibratorManager = (VibratorManager) context.getSystemService(Context.VIBRATOR_MANAGER_SERVICE);
 //            vibrator = vibratorManager.getDefaultVibrator();
-        } else {
+//        } else {
             // backward compatibility for Android API < 31,
             // VibratorManager was only added on API level 31 release.
             // noinspection deprecation
             vibrator = (Vibrator) context.getSystemService(Context.VIBRATOR_SERVICE);
-        }
+//        }
     }
 
     public static SoundManager getInstance(Context context) {
