@@ -40,7 +40,6 @@ public class AnswerJavaActivity extends AppCompatActivity {
     private CallInvite activeCallInvite;
     private int activeCallNotificationId;
     private static final int MIC_PERMISSION_REQUEST_CODE = 17893;
-    private PowerManager.WakeLock wakeLock;
     private TextView tvUserName;
     private TextView tvCallStatus;
     private ImageView btnAnswer;
@@ -279,8 +278,5 @@ public class AnswerJavaActivity extends AppCompatActivity {
     @Override
     protected void onDestroy() {
         super.onDestroy();
-        if (wakeLock != null) {
-            wakeLock.release();
-        }
     }
 }
