@@ -343,19 +343,20 @@ public class TwilioSingleton {
         parent.startActivity(intent);
     }
 
+    @SuppressWarnings("deprecation")
     void displayScreenIfUnderKeylock(Activity activity) {
         KeyguardManager kgm = (KeyguardManager) appContext.getSystemService(Context.KEYGUARD_SERVICE);
         boolean isKeyguardUp = kgm.isKeyguardLocked();
         Log.d(TAG, "isKeyguardUp = " + isKeyguardUp);
 
         if (isKeyguardUp) {
-
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O_MR1) {
+                Log.d(TAG, "Displaying Locked Screen. Version: " + Build.VERSION.SDK_INT);
                 activity.setTurnScreenOn(true);
                 activity.setShowWhenLocked(true);
-                kgm.requestDismissKeyguard(activity, null);
                 activity.getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
             } else {
+                Log.d(TAG, "Displaying Locked Screen. LEGACY Version: " + Build.VERSION.SDK_INT);
                 activity.getWindow().addFlags(
                         WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON |
                         WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED |
