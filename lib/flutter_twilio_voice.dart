@@ -1,9 +1,11 @@
+// ignore_for_file: non_constant_identifier_names
+
 import 'dart:async';
-import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:collection/collection.dart';
+import 'package:synchronized/synchronized.dart';
 
 enum CallState {
   ringing,
@@ -82,6 +84,14 @@ class AudioDevice {
     return icon;
   }
 
+  factory AudioDevice.copy(AudioDevice device) {
+    return AudioDevice()
+      ..id = device.id
+      ..name = device.name
+      ..type = device.type
+      ..selected = device.selected;
+  }
+
   void printProperties() {
     print('Name: $name, id: $id, selected: $selected, type: $type');
   }
@@ -115,6 +125,9 @@ class FlutterTwilioVoice {
   bool _bluetoothAvailable = false;
   var _audioDevices = <AudioDevice>[];
 
+  final _audioDevicesLock =
+      Lock(); // used to syncronize access to _audioDevices (critical section)
+
   int? callStartedOn;
   CallDirection _callDirection = CallDirection.incoming;
 
@@ -127,8 +140,7 @@ class FlutterTwilioVoice {
     return _onCallStateChanged;
   }
 
-  Future<bool> tokens(
-      {required String accessToken, required String fcmToken}) async {
+  Future<bool> tokens({required String accessToken, String? fcmToken}) async {
     return await _channel.invokeMethod('tokens',
         <String, dynamic>{"accessToken": accessToken, "fcmToken": fcmToken});
   }
@@ -230,13 +242,11 @@ class FlutterTwilioVoice {
   // same as getFrom in getter form
   String get fromNumber {
     return callFrom ?? "";
-    ;
   }
 
   // same as getTo in getter form
   String get toNumber {
     return callTo ?? "";
-    ;
   }
 
   String get externalNumber {
@@ -269,10 +279,14 @@ class FlutterTwilioVoice {
 
   bool get isExterenalAudioRouteAvailable {
     print('inside isExterenalAudioRouteAvailable');
-    for (var device in _audioDevices) {
-      if (device.type == AudioDeviceType.bluetooth ||
-          device.type == AudioDeviceType.wired_headset) {
-        return true;
+
+    // Don't access _audioDevices if it's being update.
+    if (!_audioDevicesLock.locked) {
+      for (var device in _audioDevices) {
+        if (device.type == AudioDeviceType.bluetooth ||
+            device.type == AudioDeviceType.wired_headset) {
+          return true;
+        }
       }
     }
     return false;
@@ -285,7 +299,19 @@ class FlutterTwilioVoice {
 
   List<AudioDevice> get audioDevices {
     print('inside get audioDevices');
-    return _audioDevices;
+
+    // Rather than returning our internal variable we will
+    // return a copy of the audioDevices list.
+    var devicesCopy = <AudioDevice>[];
+
+    // Don't access _audioDevices if it's being update.
+    // We can't do a synclock here because this is a non-async funciton.
+    if (!_audioDevicesLock.locked) {
+      _audioDevices.forEach((element) {
+        devicesCopy.add(AudioDevice.copy(element));
+      });
+    }
+    return devicesCopy;
   }
 
   int? getCallStartedOn() {
@@ -305,7 +331,7 @@ class FlutterTwilioVoice {
         _setCallInfoFromParams(params: params);
         callStartedOn = DateTime.now().millisecondsSinceEpoch;
         callInvite(
-            customParameters: params["customParameters"],
+            customParameters: params["customParameters"] ?? [],
             replay: params['replay'] ?? false,
             pluginDisplayedAnswerScreen:
                 params['pluginDisplayedAnswerScreen'] ?? false);
@@ -397,23 +423,34 @@ class FlutterTwilioVoice {
     }
   }
 
-  void _updateAudioRoute({required Map<dynamic, dynamic> params}) {
+  void _updateAudioRoute({required Map<dynamic, dynamic> params}) async {
     // Update audio devices list.
     print('inside _updateAudioRoute(): params = $params');
 
     print('_updateAudioRoute: clearing _audioDevices, before:');
-    _audioDevices.forEach((element) => element.printProperties());
-
-    _audioDevices.clear();
-    var devices = params['devices'] as List<dynamic>?;
-    if (devices != null) {
-      for (var element in devices) {
-        var device = AudioDevice.fromJson(element);
-        _audioDevices.add(device);
-      }
+    if (!_audioDevicesLock.locked) {
+      _audioDevices.forEach((element) => element.printProperties());
+    } else {
+      print('Cannot display devices, _audioDevices in sync lock');
     }
+
+    await _audioDevicesLock.synchronized(() async {
+      _audioDevices.clear();
+      var devices = params['devices'] as List<dynamic>?;
+      if (devices != null) {
+        for (var element in devices) {
+          var device = AudioDevice.fromJson(element);
+          _audioDevices.add(device);
+        }
+      }
+    });
+
     print('_updateAudioRoute: updated _audioDevices, after:');
-    _audioDevices.forEach((element) => element.printProperties());
+    if (!_audioDevicesLock.locked) {
+      _audioDevices.forEach((element) => element.printProperties());
+    } else {
+      print('Cannot display devices, _audioDevices in sync lock');
+    }
 
     _bluetoothAvailable = params["bluetooth_available"] ?? false;
     _speakerOn = params["speaker_on"] ?? false;
