@@ -11,11 +11,15 @@
 
     <application>
 
-        <activity android:name=".AnswerJavaActivity" android:turnScreenOn="true" android:showWhenLocked="true" android:showOnLockScreen="true" android:theme="@style/Theme.AppCompat" />
-        <activity android:name=".BackgroundCallPageActivity" android:turnScreenOn="true" android:showWhenLocked="true" android:showOnLockScreen="true" android:theme="@style/Theme.AppCompat" />
+        <activity android:name=".AnswerJavaActivity" android:exported="true"
+            android:turnScreenOn="true" android:showWhenLocked="true"
+            android:showOnLockScreen="true" android:theme="@style/Theme.AppCompat" />
+        <activity android:name=".BackgroundCallPageActivity" android:exported="true"
+            android:turnScreenOn="true" android:showWhenLocked="true"
+            android:showOnLockScreen="true" android:theme="@style/Theme.AppCompat" />
 
-        <service android:enabled="true" android:name=".IncomingCallNotificationService">
-            <intent-filter>
+        <service android:enabled="true" android:exported="true" android:name=".IncomingCallNotificationService">
+            <intent-filter android:exported="true">
                 <action android:name="ACTION_ACCEPT" />
                 <action android:name="ACTION_REJECT" />
             </intent-filter>
