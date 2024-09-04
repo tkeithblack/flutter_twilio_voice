@@ -195,6 +195,8 @@ public class AnswerJavaActivity extends AppCompatActivity {
 
     private void checkPermissionsAndAccept(){
         Log.d(TAG, "Clicked accept");
+
+        checkBluetoothPermissions();
         if (!checkPermissionForMicrophone()) {
             Log.d(TAG, "requestAudioPermissions");
             requestAudioPermissions();
@@ -239,6 +241,27 @@ public class AnswerJavaActivity extends AppCompatActivity {
             startService(rejectIntent);
             finishAndRemoveTask();
         }
+    }
+
+//    private void checkBluetoothPermissions() {
+        // If device is Android 12 (API level 31) or higher, then we must check/ask for bluetooth permission.
+        // Otherwise, return as no aciton is required.
+        if (Build.VERSION.SDK_INT < 31)
+            return;
+
+        String[] PERMISSIONS_BLUETOOTH = {
+            Manifest.permission.BLUETOOTH_CONNECT,
+        };
+
+        int permission = ActivityCompat.checkSelfPermission(this, Manifest.permission.BLUETOOTH_CONNECT);
+        if (permission != PackageManager.PERMISSION_GRANTED) {
+            // We don't have permission so prompt the user
+            ActivityCompat.requestPermissions(
+                    this,
+                    PERMISSIONS_BLUETOOTH,
+                    1
+            );
+        } 
     }
 
     private Boolean checkPermissionForMicrophone() {
