@@ -243,7 +243,7 @@ public class AnswerJavaActivity extends AppCompatActivity {
         }
     }
 
-//    private void checkBluetoothPermissions() {
+    private void checkBluetoothPermissions() {
         // If device is Android 12 (API level 31) or higher, then we must check/ask for bluetooth permission.
         // Otherwise, return as no aciton is required.
         if (Build.VERSION.SDK_INT < 31)
