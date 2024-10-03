@@ -193,8 +193,16 @@ public class AnswerJavaActivity extends AppCompatActivity {
         }
     }
 
+    private static final int REQUEST_CODE_MANAGE_CALLS = 1001; // You can use any unique number
+
     private void checkPermissionsAndAccept(){
         Log.d(TAG, "Clicked accept");
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            if (checkSelfPermission(Manifest.permission.MANAGE_OWN_CALLS) != PackageManager.PERMISSION_GRANTED) {
+                requestPermissions(new String[]{Manifest.permission.MANAGE_OWN_CALLS}, REQUEST_CODE_MANAGE_CALLS);
+            }
+        }
 
         checkBluetoothPermissions();
         if (!checkPermissionForMicrophone()) {

@@ -9,6 +9,7 @@ import android.app.Service;
 import android.content.Context;
 import android.content.Intent;
 import android.content.pm.ApplicationInfo;
+import android.content.pm.ServiceInfo;
 import android.graphics.Color;
 import android.graphics.drawable.Icon;
 import android.os.Build;
@@ -77,7 +78,8 @@ public class IncomingCallNotificationService extends Service {
         intent.putExtra(Constants.INCOMING_CALL_NOTIFICATION_ID, notificationId);
         intent.putExtra(Constants.INCOMING_CALL_INVITE, callInvite);
         intent.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP);
-        PendingIntent pendingIntent = PendingIntent.getActivity(this, notificationId, intent, PendingIntent.FLAG_UPDATE_CURRENT);
+        PendingIntent pendingIntent = PendingIntent.getActivity(this, notificationId, intent,
+                PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_MUTABLE);
         /*
          * Pass the notification id and call sid to use as an identifier to cancel the
          * notification later
@@ -115,7 +117,9 @@ public class IncomingCallNotificationService extends Service {
         rejectIntent.setAction(Constants.ACTION_REJECT);
         rejectIntent.putExtra(Constants.INCOMING_CALL_INVITE, callInvite);
         rejectIntent.putExtra(Constants.INCOMING_CALL_NOTIFICATION_ID, notificationId);
-        PendingIntent piRejectIntent = PendingIntent.getService(getApplicationContext(), 0, rejectIntent, PendingIntent.FLAG_UPDATE_CURRENT);
+
+        PendingIntent piRejectIntent = PendingIntent.getService(getApplicationContext(), 0, rejectIntent,
+                PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
 
         Intent acceptIntent = new Intent(getApplicationContext(), IncomingCallNotificationService.class);
         acceptIntent.setAction(Constants.ACTION_ACCEPT);
@@ -125,7 +129,9 @@ public class IncomingCallNotificationService extends Service {
         Icon answerIcon = (Icon) Icon.createWithResource(context, R.drawable.ic_answer);
         Icon rejectIcon = (Icon) Icon.createWithResource(context, R.drawable.decline_button);
 
-        PendingIntent piAcceptIntent = PendingIntent.getService(getApplicationContext(), 0, acceptIntent, PendingIntent.FLAG_UPDATE_CURRENT);
+        PendingIntent piAcceptIntent = PendingIntent.getService(getApplicationContext(), 0, acceptIntent,
+                PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
+
         Notification.Action rejectAction = new Notification.Action.Builder(rejectIcon, getString(R.string.decline),piRejectIntent).build();
         Notification.Action answerAction = new Notification.Action.Builder(answerIcon, getString(R.string.answer), piAcceptIntent).build();
 
@@ -141,10 +147,15 @@ public class IncomingCallNotificationService extends Service {
                   .setContentIntent(pendingIntent)
                   .setExtras(extras)
                   .setAutoCancel(true)
-                  .setVisibility(Notification.VISIBILITY_PUBLIC)
-                  .addAction(rejectAction)
-                  .addAction(answerAction);
+                  .setVisibility(Notification.VISIBILITY_PUBLIC);
 
+        // If Android 12 (API level 31) or above we no longer launch app from
+        // the Answer/Decline buttons. Therefore, just display the notification
+        // and when the user click it we will launch the answer screen.
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) {
+            builder.addAction(rejectAction)
+                    .addAction(answerAction);
+        }
         return builder.build();
     }
 
@@ -273,12 +284,14 @@ public class IncomingCallNotificationService extends Service {
     }
 
     private void setCallInProgressNotification(CallInvite callInvite, int notificationId) {
-        if (isAppVisible()) {
-            Log.i(TAG, "setCallInProgressNotification - app is visible.");
-            startForeground(notificationId, createNotification(callInvite, notificationId, NotificationManager.IMPORTANCE_LOW));
-        } else {
-            Log.i(TAG, "setCallInProgressNotification - app is NOT visible.");
-            startForeground(notificationId, createNotification(callInvite, notificationId, NotificationManager.IMPORTANCE_HIGH));
+        final int importance = isAppVisible() ? NotificationManager.IMPORTANCE_LOW :
+                                                NotificationManager.IMPORTANCE_HIGH;
+
+        Log.i(TAG, isAppVisible() ? "setCallInProgressNotification - app is visible." : "setCallInProgressNotification - app is NOT visible.");
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                startForeground(notificationId, createNotification(callInvite, notificationId, importance), ServiceInfo.FOREGROUND_SERVICE_TYPE_PHONE_CALL);
+            } else {
+                startForeground(notificationId, createNotification(callInvite, notificationId, importance));
         }
     }
 
