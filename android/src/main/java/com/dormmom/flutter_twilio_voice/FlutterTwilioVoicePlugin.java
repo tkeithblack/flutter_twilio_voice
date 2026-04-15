@@ -1,40 +1,42 @@
 package com.dormmom.flutter_twilio_voice;
-
+import com.dormmom.flutter_twilio_voice.fcm.VoiceFirebaseMessagingService;
+import com.twilio.audioswitch.AudioSwitch;
 import com.twilio.voice.Call;
-import com.twilio.voice.CallException;
 import com.twilio.voice.CallInvite;
+import com.twilio.voice.CancelledCallInvite;
 import com.twilio.voice.ConnectOptions;
+import com.twilio.voice.LogLevel;
 import com.twilio.voice.RegistrationException;
 import com.twilio.voice.RegistrationListener;
 import com.twilio.voice.UnregistrationListener;
 import com.twilio.voice.Voice;
-import com.dormmom.flutter_twilio_voice.AnswerJavaActivity;
+import com.twilio.audioswitch.AudioDevice;
 
+import java.util.ArrayList;
+import java.util.Date;
 import java.util.HashMap;
-import java.util.Map;
 
 import android.Manifest;
 import android.app.Activity;
+import android.app.KeyguardManager;
 import android.app.NotificationManager;
 import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
-import android.content.SharedPreferences;
 import android.content.pm.PackageManager;
-import android.media.AudioAttributes;
-import android.media.AudioFocusRequest;
 import android.media.AudioManager;
 import android.os.Build;
+import android.os.PowerManager;
 import android.util.Log;
+import android.view.Window;
+import android.view.WindowManager;
 
 import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
 import androidx.core.app.ActivityCompat;
 import androidx.core.content.ContextCompat;
-import androidx.lifecycle.Lifecycle;
-import androidx.lifecycle.ProcessLifecycleOwner;
 import androidx.localbroadcastmanager.content.LocalBroadcastManager;
-
 import io.flutter.embedding.engine.plugins.FlutterPlugin;
 import io.flutter.embedding.engine.plugins.activity.ActivityAware;
 import io.flutter.embedding.engine.plugins.activity.ActivityPluginBinding;
@@ -44,179 +46,244 @@ import io.flutter.plugin.common.MethodCall;
 import io.flutter.plugin.common.MethodChannel;
 import io.flutter.plugin.common.PluginRegistry;
 
+import java.util.List;
+import java.util.Map;
+
+enum CallState {
+    ringing, connected, reconnecting, reconnected, connect_failed, call_invite, call_invite_canceled, call_reject, call_ended,
+    unhold, hold, unmute, mute, speaker_on, speaker_off, audio_route_change, call_quality_warning
+}
+
+enum CallDirection {
+    incoming, outgoing
+}
+
 public class FlutterTwilioVoicePlugin implements FlutterPlugin, MethodChannel.MethodCallHandler, EventChannel.StreamHandler,
-        ActivityAware, PluginRegistry.NewIntentListener {
+  ActivityAware, PluginRegistry.NewIntentListener {
+
+    static VoiceFirebaseMessagingService vms = new VoiceFirebaseMessagingService();
 
     private static final String CHANNEL_NAME = "flutter_twilio_voice";
     private static final String TAG = "TwilioVoicePlugin";
-    public static final String TwilioPreferences = "mx.TwilioPreferences";
     private static final int MIC_PERMISSION_REQUEST_CODE = 1;
 
     private String accessToken;
     private AudioManager audioManager;
-    private int savedAudioMode = AudioManager.MODE_INVALID;
-    private int savedVolumeControlStream;
 
     private boolean isReceiverRegistered = false;
     private VoiceBroadcastReceiver voiceBroadcastReceiver;
 
-
     private NotificationManager notificationManager;
-    //private SoundPoolManager soundPoolManager;
-    private CallInvite activeCallInvite;
-    private Call activeCall;
-    private int activeCallNotificationId;
     private Context context;
     private Activity activity;
 
     RegistrationListener registrationListener = registrationListener();
     UnregistrationListener unregistrationListener = unregistrationListener();
-    Call.Listener callListener = callListener();
     private MethodChannel methodChannel;
     private EventChannel eventChannel;
     private EventChannel.EventSink eventSink;
     private String fcmToken;
     private boolean callOutgoing;
-    private boolean backgroundCallUI = false;
 
-    private SharedPreferences pSharedPref;
+    protected void finalize ()
+    {
+        twSingleton().unregisterPlugin();
+    }
+
+
+    // getter shortcuts.
+    TwilioSingleton twSingleton() {
+        return TwilioSingleton.getInstance(context);
+    }
+    Call.Listener callListener() {
+        return twSingleton().getCallListener();
+    }
+    AudioSwitch audioSwitch() {
+        return twSingleton().audioSwitch;
+    }
 
     @Override
-    public void onAttachedToEngine(FlutterPluginBinding flutterPluginBinding) {
-        register(flutterPluginBinding.getBinaryMessenger(), this, flutterPluginBinding.getApplicationContext());
+    public void onAttachedToEngine(FlutterPluginBinding binding) {
+        Log.i(TAG, "onAttachedToEngine()");
+        register(binding.getBinaryMessenger(), this, binding.getApplicationContext());
     }
 
     private static void register(BinaryMessenger messenger, FlutterTwilioVoicePlugin plugin, Context context) {
+//        CallListener.registerPlugin(plugin);
+
         plugin.methodChannel = new MethodChannel(messenger, CHANNEL_NAME + "/messages");
         plugin.methodChannel.setMethodCallHandler(plugin);
+
 
         plugin.eventChannel = new EventChannel(messenger, CHANNEL_NAME + "/events");
         plugin.eventChannel.setStreamHandler(plugin);
 
         plugin.context = context;
-        //plugin.soundPoolManager = SoundPoolManager.getInstance(context);
 
         plugin.notificationManager = (NotificationManager) context.getSystemService(Context.NOTIFICATION_SERVICE);
         plugin.voiceBroadcastReceiver = new VoiceBroadcastReceiver(plugin);
-        // plugin.registerReceiver();
 
         /*
          * Needed for setting/abandoning audio focus during a call
          */
         plugin.audioManager = (AudioManager) context.getSystemService(Context.AUDIO_SERVICE);
-        plugin.audioManager.setSpeakerphoneOn(false);
+        plugin.audioManager.setSpeakerphoneOn(true);
 
-        plugin.pSharedPref = context.getSharedPreferences(TwilioPreferences, Context.MODE_PRIVATE);
+        /*
+         * Enable changing the volume using the up/down keys during a conversation
+         */
+        //setVolumeControlStream(AudioManager.STREAM_VOICE_CALL);
 
-
-    }
-
-    /**
-     * Plugin registration.
-     */
-    public static void registerWith(PluginRegistry.Registrar registrar) {
-        // Detect if we've been launched in background
-        if (registrar.activity() == null) {
-            return;
-        }
-
-        final FlutterTwilioVoicePlugin instance = new FlutterTwilioVoicePlugin();
-        instance.activity = registrar.activity();
-        register(registrar.messenger(), instance, registrar.context());
-        registrar.addNewIntentListener(instance);
+        Voice.setLogLevel(LogLevel.INFO);
+        Log.i(TAG, "TwilioVoice Version: " + Voice.getVersion());
+        Log.i(TAG, "TwilioVoice Log Level: " + Voice.getLogLevel());
     }
 
     private void handleIncomingCallIntent(Intent intent) {
-        if (intent != null && intent.getAction() != null) {
-            String action = intent.getAction();
-            Log.d(TAG, "Handling incoming call intent for action " + action);
-            activeCallInvite = intent.getParcelableExtra(Constants.INCOMING_CALL_INVITE);
-            activeCallNotificationId = intent.getIntExtra(Constants.INCOMING_CALL_NOTIFICATION_ID, 0);
+       if (intent != null && intent.getAction() != null) {
+           String action = intent.getAction();
+           Log.d(TAG, "==============>> Handling incoming call intent for action " + action);
             callOutgoing = false;
 
             switch (action) {
-                case Constants.ACTION_INCOMING_CALL:
-                    handleIncomingCall(activeCallInvite.getFrom(), activeCallInvite.getTo());
-                    if (Build.VERSION.SDK_INT >= 29 && !isAppVisible()) {
-                        break;
-                    }
-                    startAnswerActivity(activeCallInvite, activeCallNotificationId);
-                    break;
-                case Constants.ACTION_CANCEL_CALL:
-                    handleCancel();
-                    break;
-                case Constants.ACTION_REJECT:
-                    handleReject();
-                    break;
-                case Constants.ACTION_ACCEPT:
-                    answer();
-                    break;
-                case Constants.ACTION_TOGGLE_MUTE:
-                    mute();
-                    break;
-                case Constants.ACTION_END_CALL:
-                    backgroundCallUI = false;
-                    disconnect();
-                    break;
-                default:
-                    break;
+            case Constants.ACTION_INCOMING_CALL:
+                int notificationId = intent.getIntExtra(Constants.INCOMING_CALL_NOTIFICATION_ID, 0);
+                CallInvite callInvite = intent.getParcelableExtra(Constants.INCOMING_CALL_INVITE);
+                sendIncomingCallInfo(callInvite, notificationId, false);
+                break;
+            case Constants.ACTION_INCOMING_CALL_NOTIFICATION:
+                twSingleton().activeCallNotificationId = intent.getIntExtra(Constants.INCOMING_CALL_NOTIFICATION_ID, 0);
+                Log.d(TAG, "ACTION_INCOMING_CALL_NOTIFICATION, activeNotificationId: " + twSingleton().activeCallNotificationId);
+                break;
+            case Constants.ACTION_CANCEL_CALL:
+                twSingleton().activeCallNotificationId = intent.getIntExtra(Constants.INCOMING_CALL_NOTIFICATION_ID, 0);
+                CancelledCallInvite cancelledCallInvite = intent.getParcelableExtra(Constants.CANCELLED_CALL_INVITE);
+
+                String callError = null;
+                if (intent.hasExtra(Constants.CANCELLED_CALL_INVITE_ERROR))
+                    callError = intent.getStringExtra(Constants.CANCELLED_CALL_INVITE_ERROR);
+                handleCancel(cancelledCallInvite, callError);
+                break;
+//            case Constants.ACTION_ANSWERED:
+//                twSingleton().activeCallNotificationId = intent.getIntExtra(Constants.INCOMING_CALL_NOTIFICATION_ID, 0);
+//                twSingleton().activeCallInvite = intent.getParcelableExtra(Constants.INCOMING_CALL_INVITE);
+//                answer();
+//                break;
+            case Constants.ACTION_DECLINED:
+//                twSingleton().activeCallNotificationId = intent.getIntExtra(Constants.INCOMING_CALL_NOTIFICATION_ID, 0);
+//                twSingleton().activeCallInvite = intent.getParcelableExtra(Constants.INCOMING_CALL_INVITE);
+                reject(true);
+                break;
+            case Constants.ACTION_APP_TO_FOREGROUND:
+                showWhenInBackground();
+                break;
+            default:
+                Log.e(TAG, "handleIncomingCallIntent action NOT handled. " + action);
+                break;
             }
+       }
+    }
+
+    private Date lastInviteTime;
+    private final static int CALL_INVITE_STALE_SECONDS = 30;
+
+    void sendIncomingCallInfo(@NonNull CallInvite callInvite, int notificationId, boolean replay) {
+            Log.d(TAG, "Processing call callInvite: " + callInvite);
+
+            HashMap<String, Object> params = paramsFromCallInvite(callInvite, CallState.call_invite);
+            if (replay) {
+                params.put("replay", true);
+            }
+            sendPhoneCallEvents(params);
+    }
+
+    private HashMap<String, Object> paramsFromCallInvite(CallInvite callInvite, CallState event) {
+
+        final HashMap<String, Object> params = new HashMap<>();
+        params.put("event", event.name());
+        params.put("from", callInvite.getFrom());
+        params.put("to", callInvite.getTo());
+        params.put("sid", callInvite.getCallSid());
+        params.put("direction", CallDirection.incoming.name());
+
+        if (IncomingCallNotificationService.pluginDisplayedAnswerScreen) {
+            // This parameter lets the app know the incoming call screen is handled.
+            params.put("pluginDisplayedAnswerScreen", true);
+        }
+
+        Object customParameters = callInvite.getCustomParameters();
+        if (customParameters != null)
+            params.put("customParameters",  customParameters);
+
+        return params;
+    }
+
+    private void handleCancel(@NonNull CancelledCallInvite cancelledCallInvite, @Nullable String callErrorDescription) {
+        //if (alertDialog != null && alertDialog.isShowing()) {
+
+        Log.d(TAG, "handleCancel: activeInviteCount = " + twSingleton().activeInviteCount);
+
+        // Sometimes we get more than one invite from Twilio for the same call.
+        // When this happens the second invite will not be answered, which causes
+        // us to receive a cancelInvite for that second invite.
+        // However, we don't want to hangup when there is still an
+        // active call. Therefore, do not send the cancel invite message until
+        // activeInvite count is == 1.
+        twSingleton().decrementActiveInviteCount();
+        if (twSingleton().activeInviteCount  == 0) {
+            final HashMap<String, Object> params = new HashMap<>();
+            params.put("event", CallState.call_invite_canceled.name());
+            params.put("from", cancelledCallInvite.getFrom());
+            params.put("to", cancelledCallInvite.getTo());
+            params.put("sid", cancelledCallInvite.getCallSid());
+            params.put("direction",  CallDirection.incoming.name());
+            if (callErrorDescription != null)
+                params.put("error",  callErrorDescription);
+
+            sendPhoneCallEvents(params);
+
+            callOutgoing = false;
+            SoundManager.getInstance(context).stopRinging();
+
+            Log.d(TAG, "Setting activeCallInvite = null: Loc 1");
+            twSingleton().activeCallInvite = null;
         }
     }
 
-    private void startAnswerActivity(CallInvite callInvite, int notificationId) {
-        Intent intent = new Intent(activity, AnswerJavaActivity.class);
-        intent.setAction(Constants.ACTION_INCOMING_CALL);
-        intent.putExtra(Constants.INCOMING_CALL_NOTIFICATION_ID, notificationId);
-        intent.putExtra(Constants.INCOMING_CALL_INVITE, callInvite);
-        intent.addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP);
-        intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-        activity.startActivity(intent);
-    }
+    private void showWhenInBackground() {
+        Log.d(TAG, "Inside showWhenInBackground()");
+        if (activity == null) return;
 
-    private void handleIncomingCall(String from, String to) {
-        sendPhoneCallEvents("Ringing|" + from + "|" + to + "|" + "Incoming");
-        SoundPoolManager.getInstance(activity).playRinging();
-    }
-
-    private void handleReject() {
-        sendPhoneCallEvents("LOG|INFO|Call Rejected");
-        SoundPoolManager.getInstance(activity).stopRinging();
-        SoundPoolManager.getInstance(activity).playDisconnect();
-    }
-
-    private void handleCancel() {
-        callOutgoing = false;
-        sendPhoneCallEvents("Call Ended");
-        SoundPoolManager.getInstance(activity).stopRinging();
-        Intent intent = new Intent(activity, AnswerJavaActivity.class);
-        intent.setAction(Constants.ACTION_CANCEL_CALL);
-        intent.addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP);
-        intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-        activity.startActivity(intent);
-
+        twSingleton().displayScreenIfUnderKeylock(activity);
     }
 
     private void registerReceiver() {
         if (!isReceiverRegistered) {
+            twSingleton().registerPlugin(this);
+
             Log.d(TAG, "registerReceiver");
             IntentFilter intentFilter = new IntentFilter();
+            intentFilter.addAction(Constants.ACTION_CALLINVITE);
             intentFilter.addAction(Constants.ACTION_INCOMING_CALL);
+            intentFilter.addAction(Constants.ACTION_INCOMING_CALL_NOTIFICATION);
             intentFilter.addAction(Constants.ACTION_CANCEL_CALL);
-            intentFilter.addAction(Constants.ACTION_ACCEPT);
-            intentFilter.addAction(Constants.ACTION_REJECT);
-            intentFilter.addAction(Constants.ACTION_END_CALL);
-            intentFilter.addAction(Constants.ACTION_TOGGLE_MUTE);
-            LocalBroadcastManager.getInstance(this.activity).registerReceiver(
-                    voiceBroadcastReceiver, intentFilter);
+            intentFilter.addAction(Constants.ACTION_FCM_TOKEN);
+            intentFilter.addAction(Constants.ACTION_ANSWERED);
+            intentFilter.addAction(Constants.ACTION_DECLINED);
+                LocalBroadcastManager.getInstance(this.activity).registerReceiver(
+              voiceBroadcastReceiver, intentFilter);
             isReceiverRegistered = true;
         }
     }
 
     private void unregisterReceiver() {
+        Log.d(TAG, "UN-registerReceiver");
         if (isReceiverRegistered) {
+            twSingleton().unregisterPlugin();
             LocalBroadcastManager.getInstance(this.activity).unregisterReceiver(voiceBroadcastReceiver);
             isReceiverRegistered = false;
+
+            audioSwitch().stop();
         }
     }
 
@@ -239,7 +306,7 @@ public class FlutterTwilioVoicePlugin implements FlutterPlugin, MethodChannel.Me
         return new UnregistrationListener() {
             @Override
             public void onUnregistered(String accessToken, String fcmToken) {
-                Log.d(TAG, "Successfully un-registered FCM " + fcmToken);
+                Log.d(TAG, "Successfully registered FCM " + fcmToken);
             }
 
             @Override
@@ -262,12 +329,26 @@ public class FlutterTwilioVoicePlugin implements FlutterPlugin, MethodChannel.Me
         public void onReceive(Context context, Intent intent) {
             String action = intent.getAction();
             Log.d(TAG, "Received broadcast for action " + action);
-            if (action != null) {
-                /*
-                 * Handle the incoming or cancelled call invite
-                 */
-                plugin.handleIncomingCallIntent(intent);
-            }
+
+            if (action != null)
+                switch (action) {
+                    case Constants.ACTION_INCOMING_CALL:
+                    case Constants.ACTION_CANCEL_CALL:
+                    case Constants.ACTION_REJECT:
+                    case Constants.ACTION_ACCEPT:
+                    case Constants.ACTION_ANSWERED:
+                    case Constants.ACTION_DECLINED:
+
+                        /*
+                         * Handle the incoming or cancelled call invite
+                         */
+                        plugin.handleIncomingCallIntent(intent);
+                        break;
+                    default:
+                        Log.d(TAG, "Received broadcast for other action " + action);
+                        break;
+
+                }
         }
     }
 
@@ -290,31 +371,32 @@ public class FlutterTwilioVoicePlugin implements FlutterPlugin, MethodChannel.Me
     }
 
     private void unregisterForCallInvites() {
+        Log.i(TAG, "unregisterForCallInvites()");
         if (this.accessToken != null && this.fcmToken != null) {
             Log.i(TAG, "Un-registering with FCM");
             Voice.unregister(this.accessToken, Voice.RegistrationChannel.FCM, this.fcmToken, unregistrationListener);
+            this.accessToken = null;
+            this.fcmToken = null;
         }
     }
 
     @Override
     public void onDetachedFromEngine(FlutterPluginBinding flutterPluginBinding) {
+        Log.i(TAG, "onDetachedFromEngine()");
         Log.d(TAG, "Detatched from Flutter engine");
-        SoundPoolManager.getInstance(activity).release();
-        context = null;
-        methodChannel.setMethodCallHandler(null);
-        methodChannel = null;
-        eventChannel.setStreamHandler(null);
-        eventChannel = null;
+        //soundPoolManager.release();
     }
 
     @Override
     public void onListen(Object o, EventChannel.EventSink eventSink) {
+        Log.i(TAG, "onListen()");
         Log.i(TAG, "Setting event sink");
         this.eventSink = eventSink;
     }
 
     @Override
     public void onCancel(Object o) {
+        Log.i(TAG, "onCancel()");
         Log.i(TAG, "Removing event sink");
         this.eventSink = null;
     }
@@ -324,131 +406,101 @@ public class FlutterTwilioVoicePlugin implements FlutterPlugin, MethodChannel.Me
         if (call.method.equals("tokens")) {
             Log.d(TAG, "Setting up tokens");
             this.accessToken = call.argument("accessToken");
-            this.fcmToken = call.argument("deviceToken");
+            this.fcmToken = call.argument("fcmToken");
             this.registerForCallInvites();
             result.success(true);
         } else if (call.method.equals("sendDigits")) {
             String digits = call.argument("digits");
-            if (this.activeCall != null) {
+            if (this.twSingleton().activeCall != null) {
                 Log.d(TAG, "Sending digits " + digits);
-                this.activeCall.sendDigits(digits);
+                this.twSingleton().activeCall.sendDigits(digits);
             }
             result.success(true);
         } else if (call.method.equals("hangUp")) {
             Log.d(TAG, "Hanging up");
-            this.disconnect();
+            twSingleton().disconnect();
             result.success(true);
         } else if (call.method.equals("toggleSpeaker")) {
-
             boolean speakerIsOn = call.argument("speakerIsOn");
-            // if(speakerIsOn == null) return;
-            audioManager.setSpeakerphoneOn(speakerIsOn);
-            sendPhoneCallEvents(speakerIsOn ? "Speaker On" : "Speaker Off");
-
+            twSingleton().toggleSpeaker(speakerIsOn);
+            result.success(true);
+        } else if (call.method.equals("selectAudioDevice")) {
+            String deviceID = call.argument("deviceID");
+            selectAudioDevice(deviceID);
             result.success(true);
         } else if (call.method.equals("muteCall")) {
             Log.d(TAG, "Muting call");
-            this.mute();
+            twSingleton().mute();
             result.success(true);
         } else if (call.method.equals("isOnCall")) {
-            Log.d(TAG, "Is on call invoked");
-            result.success(this.activeCall != null);
+            boolean value = connected();
+            Log.d(TAG, "isOnCall invoked = " + value);
+            result.success(value);
         } else if (call.method.equals("holdCall")) {
             Log.d(TAG, "Hold call invoked");
-            this.hold();
+            twSingleton().hold();
             result.success(true);
         } else if (call.method.equals("answer")) {
             Log.d(TAG, "Answering call");
             this.answer();
+            result.success(true);
+        } else if (call.method.equals("reject")) {
+            Log.d(TAG, "Rejecting call");
+            this.reject(false);
             result.success(true);
         } else if (call.method.equals("unregister")) {
             this.unregisterForCallInvites();
             result.success(true);
         } else if (call.method.equals("makeCall")) {
             Log.d(TAG, "Making new call");
-            sendPhoneCallEvents("LOG|INFO|Making new call");
-            final Map<String, Object> allParams = call.arguments();
-            final Map<String, String> params = new HashMap<>(allParams.size());
-            for (Map.Entry<String, Object> entry : allParams.entrySet()) {
-                final Object value = entry.getValue();
-                params.put(entry.getKey(), value == null ? "" : value.toString());
+            final HashMap<String, String> params = new HashMap<>();
+            params.put("To", call.argument("to").toString());
+            params.put("From", call.argument("from").toString());
+
+            @SuppressWarnings("unchecked") Map<String, String> arguments = (Map<String, String>)call.arguments;
+            // Add optional parameters.
+            for (Map.Entry<String,String> entry : arguments.entrySet()) {
+                String key =  entry.getKey();
+                String value = entry.getValue();
+                if (key != "to" && key != "from") {
+                    params.put(key, value);
+                }
             }
-            Log.d(TAG, "calling");
-            Log.d(TAG, params.get("To"));
-            params.put("To", params.get("To"));
-//             params.put("From", call.argument("from").toString());
+            twSingleton().outgoingFromNumber = params.get("From");
+            twSingleton().outgoingToNumber = params.get("To");
             this.callOutgoing = true;
             final ConnectOptions connectOptions = new ConnectOptions.Builder(this.accessToken)
-                    .params(params)
-                    .build();
-            this.activeCall = Voice.connect(this.activity, connectOptions, this.callListener);
+              .params(params)
+              .build();
+            this.twSingleton().activeCall = Voice.connect(this.activity, connectOptions, this.callListener());
             result.success(true);
-        } else if (call.method.equals("registerClient")) {
-            String id = call.argument("id");
-            String name = call.argument("name");
-            if (id != null && name != null && !pSharedPref.contains(id)) {
-                sendPhoneCallEvents("LOG|INFO|Registering client " + id + ":" + name);
-                SharedPreferences.Editor edit = pSharedPref.edit();
-                edit.putString(id, name);
-                edit.apply();
-            }
-        } else if (call.method.equals("unregisterClient")) {
-            String id = call.argument("id");
-            if (id != null) {
-                sendPhoneCallEvents("LOG|INFO|Unegistering" + id);
-                SharedPreferences.Editor edit = pSharedPref.edit();
-                edit.remove(id);
-                edit.apply();
-            }
-        } else if (call.method.equals("defaultCaller")) {
-            String caller = call.argument("defaultCaller");
-            if (caller != null) {
-                sendPhoneCallEvents("LOG|INFO|defaultCaller is " + caller);
-                SharedPreferences.Editor edit = pSharedPref.edit();
-                edit.putString("defaultCaller", caller);
-                edit.apply();
-            }
-        } else if (call.method.equals("hasMicPermission")) {
-            result.success(this.checkPermissionForMicrophone());
-        } else if (call.method.equals("requestMicPermission")) {
-            sendPhoneCallEvents("LOG|INFO|requesting mic permission");
-            if (!this.checkPermissionForMicrophone()) {
-                boolean hasAccess = this.requestPermissionForMicrophone();
-                result.success(hasAccess);
-            } else {
-                result.success(true);
-            }
-        } else if (call.method.equals("backgroundCallUI")) {
-            if (activeCall != null) {
-                Intent intent = new Intent(activity, BackgroundCallJavaActivity.class);
-                intent.addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP);
-                intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-                intent.putExtra(Constants.CALL_FROM, activeCall.getFrom());
-                activity.startActivity(intent);
-                backgroundCallUI = true;
-            }
-
-
-        } else if (call.method.equals("requiresBackgroundPermissions")){
-            String manufacturer = "xiaomi";
-            if (manufacturer.equalsIgnoreCase(android.os.Build.MANUFACTURER)) {
+        } else if (call.method.equals("replayCallConnection")) {
+            // This method was created for situations where the Flutter App does not
+            // receive the inital CallInvite. This can occur if the app is in the background
+            // a Notification window answers the call.
+            //
+            // When the replayed callInvite is sent an extra parameter will be set 'replay: true'
+            Log.d(TAG, "replayCallConnection(), activeCallInvite  = " + twSingleton().activeCallInvite + ", activeCall = " + twSingleton().activeCall);
+            if (twSingleton().activeCallInvite != null && twSingleton().activeCall != null) {
+                sendIncomingCallInfo(twSingleton().activeCallInvite, twSingleton().activeCallNotificationId , true);
+                twSingleton().handleCallConnect(twSingleton().activeCall);
                 result.success(true);
                 return;
             }
             result.success(false);
-        } else if (call.method.equals("requestBackgroundPermissions")){
-            String manufacturer = "xiaomi";
-            if (manufacturer.equalsIgnoreCase(android.os.Build.MANUFACTURER)) {
-
-                Intent localIntent = new Intent("miui.intent.action.APP_PERM_EDITOR");
-                localIntent.setClassName("com.miui.securitycenter", "com.miui.permcenter.permissions.PermissionsEditorActivity");
-                localIntent.putExtra("extra_pkgname", activity.getPackageName());
-                activity.startActivity(localIntent);
-            }
+        } else if (call.method.equals("refreshAudioRoute")) {
+            // Used to query and send auto state back to Flutter App.
+            twSingleton().queryAndSendAudioDeviceInfo();
             result.success(true);
-        }else{
+        } else {
             result.notImplemented();
         }
+    }
+
+    boolean connected() {
+        Log.d(TAG, "Inside connected() - activeCall = " + twSingleton().activeCall);
+
+        return twSingleton().activeCall != null && twSingleton().activeCall.getState() == Call.State.CONNECTED;
     }
 
     /*
@@ -456,35 +508,54 @@ public class FlutterTwilioVoicePlugin implements FlutterPlugin, MethodChannel.Me
      */
     private void answer() {
         Log.d(TAG, "Answering call");
-        SoundPoolManager.getInstance(activity).stopRinging();
-
-        activeCallInvite.accept(this.activity, callListener);
-        sendPhoneCallEvents("Answer|"+activeCallInvite.getFrom() + "|" + activeCallInvite.getTo());
-        notificationManager.cancel(activeCallNotificationId);
+        SoundManager.getInstance(context).stopRinging();
+        if (twSingleton().activeCallInvite != null) {
+            twSingleton().activeCallInvite.accept(context, callListener());
+        }
     }
 
-    private void sendPhoneCallEvents(String description) {
-        if (eventSink == null) {
-            return;
+    /// This reject function is called when the user clicks the decline button in the Flutter interface.
+    private void reject(boolean calledFromNotificationPopup) {
+        if (twSingleton().activeCallInvite != null) {
+            HashMap<String, Object> params = paramsFromCallInvite(twSingleton().activeCallInvite, CallState.call_reject);
+            sendPhoneCallEvents(params);
+
+            /// If reject is called when the user clicks the decline button from a popup notification
+            /// then we will not call twSingleton().activeCallInvite.reject() here as it is done in the  Notification popup.
+            /// This is done because we might get a call with the app closed or in the background.
+            /// In such case this reject funciton will not be called as the app is not in memory.
+            /// However, if the reject call comes from the Flutter app then we DO need to call reject().
+            if (!calledFromNotificationPopup) {
+                SoundManager.getInstance(context).stopRinging();
+                twSingleton().activeCallInvite.reject(context);
+            }
+            twSingleton().activeCall = null;
+            twSingleton().outgoingFromNumber = null;
+            twSingleton().outgoingToNumber = null;
+            Log.d(TAG, "Setting activeCallInvite = null: Loc 2");
+
+            twSingleton().activeCallInvite = null;
         }
-        eventSink.success(description);
+        twSingleton().resetActiveInviteCount();
     }
 
     @Override
     public boolean onNewIntent(Intent intent) {
-        Log.d(TAG, "onNewIntent");
+        Log.d(TAG, "Inside onNewIntent, Intent: " + intent);
+        activity.setIntent(intent);
         this.handleIncomingCallIntent(intent);
         return false;
     }
 
     @Override
     public void onAttachedToActivity(ActivityPluginBinding activityPluginBinding) {
+        Log.d(TAG, "Inside onAttachedToActivity()");
         this.activity = activityPluginBinding.getActivity();
         activityPluginBinding.addOnNewIntentListener(this);
         registerReceiver();
-        /*
-         * Ensure the microphone permission is enabled
-         */
+//        /*
+//         * Ensure the microphone permission is enabled
+//         */
 //        if (!this.checkPermissionForMicrophone()) {
 //            this.requestPermissionForMicrophone();
 //        }
@@ -492,6 +563,8 @@ public class FlutterTwilioVoicePlugin implements FlutterPlugin, MethodChannel.Me
 
     @Override
     public void onDetachedFromActivityForConfigChanges() {
+        Log.d(TAG, "onDetachedFromActivityForConfigChanges()");
+
         this.activity = null;
         unregisterReceiver();
     }
@@ -505,194 +578,134 @@ public class FlutterTwilioVoicePlugin implements FlutterPlugin, MethodChannel.Me
 
     @Override
     public void onDetachedFromActivity() {
+        Log.d(TAG, "onDetachedFromActivity()");
+
         unregisterReceiver();
         this.activity = null;
     }
 
-    private Call.Listener callListener() {
-        return new Call.Listener() {
-            /*
-             * This callback is emitted once before the Call.Listener.onConnected() callback when
-             * the callee is being alerted of a Call. The behavior of this callback is determined by
-             * the answerOnBridge flag provided in the Dial verb of your TwiML application
-             * associated with this client. If the answerOnBridge flag is false, which is the
-             * default, the Call.Listener.onConnected() callback will be emitted immediately after
-             * Call.Listener.onRinging(). If the answerOnBridge flag is true, this will cause the
-             * call to emit the onConnected callback only after the call is answered.
-             * See answeronbridge for more details on how to use it with the Dial TwiML verb. If the
-             * twiML response contains a Say verb, then the call will emit the
-             * Call.Listener.onConnected callback immediately after Call.Listener.onRinging() is
-             * raised, irrespective of the value of answerOnBridge being set to true or false
-             */
-            @Override
-            public void onRinging(Call call) {
-                Log.d(TAG, "onRinging");
-                sendPhoneCallEvents("Ringing|" + call.getFrom() + "|" + call.getTo() + "|" + (callOutgoing ? "Outgoing" : "Incoming"));
-            }
-
-            @Override
-            public void onConnectFailure(Call call, CallException error) {
-                // setAudioFocus(false);
-                Log.d(TAG, "Connect failure");
-                String message = String.format("Call Error: %d, %s", error.getErrorCode(), error.getMessage());
-                Log.e(TAG, message);
-                sendPhoneCallEvents("LOG|INFO|" + message);
-
-            }
-
-            @Override
-            public void onConnected(Call call) {
-                // setAudioFocus(true);
-                Log.d(TAG, "onConnected");
-//                eventSink.success("LOG|INFO|Connected");
-                activeCall = call;
-                /*
-                 * Enable changing the volume using the up/down keys during a conversation
-                 */
-                savedVolumeControlStream = activity.getVolumeControlStream();
-                activity.setVolumeControlStream(AudioManager.STREAM_VOICE_CALL);
-                sendPhoneCallEvents("Connected|" + call.getFrom() + "|" + call.getTo() + "|" + (callOutgoing ? "Outgoing" : "Incoming"));
-            }
-
-            @Override
-            public void onReconnecting(@NonNull Call call, @NonNull CallException callException) {
-                Log.d(TAG, "onReconnecting");
-            }
-
-            @Override
-            public void onReconnected(@NonNull Call call) {
-                Log.d(TAG, "onReconnected");
-            }
-
-            @Override
-            public void onDisconnected(Call call, CallException error) {
-                // setAudioFocus(false);
-                Log.d(TAG, "Disconnected");
-                if (error != null) {
-                    String message = String.format("Call Error: %d, %s", error.getErrorCode(), error.getMessage());
-                    Log.e(TAG, message);
-                }
-                activity.setVolumeControlStream(savedVolumeControlStream);
-                sendPhoneCallEvents("Call Ended");
-                disconnected();
-            }
-        };
-
-    }
-
-    private void disconnect() {
-        if (activeCall != null) {
-            activeCall.disconnect();
-            disconnected();
-        }
-    }
-
-    private void disconnected() {
-
-        if(activeCall == null) return;
-
-        if (backgroundCallUI) {
-            Intent intent = new Intent(activity, BackgroundCallJavaActivity.class);
-            intent.addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP);
-
-            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-            intent.setAction(Constants.ACTION_CANCEL_CALL);
-
-            activity.startActivity(intent);
-        }
-        SoundPoolManager.getInstance(activity).playDisconnect();
-        backgroundCallUI = false;
-        callOutgoing = false;
-        activeCall = null;
-
-    }
-
-    private void hold() {
-        if (activeCall != null) {
-            boolean hold = activeCall.isOnHold();
-            activeCall.hold(!hold);
-            eventSink.success(hold ? "Unhold" : "Hold");
-        }
-    }
-
-    private void mute() {
-        if (activeCall != null) {
-            boolean mute = activeCall.isMuted();
-            activeCall.mute(!mute);
-            eventSink.success(mute ? "Unmute" : "Mute");
-        }
-    }
-
-    private void setAudioFocus(boolean setFocus) {
-        if (audioManager != null) {
-            if (setFocus) {
-                savedAudioMode = audioManager.getMode();
-                // Request audio focus before making any device switch.
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                    AudioAttributes playbackAttributes = new AudioAttributes.Builder()
-                            .setUsage(AudioAttributes.USAGE_VOICE_COMMUNICATION)
-                            .setContentType(AudioAttributes.CONTENT_TYPE_SPEECH)
-                            .build();
-                    AudioFocusRequest focusRequest = new AudioFocusRequest.Builder(AudioManager.AUDIOFOCUS_GAIN_TRANSIENT)
-                            .setAudioAttributes(playbackAttributes)
-                            .setAcceptsDelayedFocusGain(true)
-                            .setOnAudioFocusChangeListener(new AudioManager.OnAudioFocusChangeListener() {
-                                @Override
-                                public void onAudioFocusChange(int i) {
-                                }
-                            })
-                            .build();
-                    audioManager.requestAudioFocus(focusRequest);
-                } else {
-                    if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.FROYO) {
-                        int focusRequestResult = audioManager.requestAudioFocus(
-                                new AudioManager.OnAudioFocusChangeListener() {
-
-                                    @Override
-                                    public void onAudioFocusChange(int focusChange) {
-                                    }
-                                }, AudioManager.STREAM_VOICE_CALL,
-                                AudioManager.AUDIOFOCUS_GAIN_TRANSIENT);
-                    }
-                }
-                /*
-                 * Start by setting MODE_IN_COMMUNICATION as default audio mode. It is
-                 * required to be in this mode when playout and/or recording starts for
-                 * best possible VoIP performance. Some devices have difficulties with speaker mode
-                 * if this is not set.
-                 */
-                audioManager.setMode(AudioManager.MODE_IN_COMMUNICATION);
-            } else {
-                audioManager.setMode(savedAudioMode);
-                audioManager.abandonAudioFocus(null);
-            }
-        }
-    }
-
     private boolean checkPermissionForMicrophone() {
-        eventSink.success("LOG|INFO|checkPermissionForMicrophone");
         int resultMic = ContextCompat.checkSelfPermission(this.context, Manifest.permission.RECORD_AUDIO);
         return resultMic == PackageManager.PERMISSION_GRANTED;
     }
 
-    private boolean requestPermissionForMicrophone() {
-        eventSink.success("LOG|INFO|requestPermissionForMicrophone");
+    private void requestPermissionForMicrophone() {
         if (ActivityCompat.shouldShowRequestPermissionRationale(this.activity, Manifest.permission.RECORD_AUDIO)) {
-            eventSink.success("RequestMicrophoneAccess");
-            return false;
+
         } else {
             ActivityCompat.requestPermissions(this.activity,
-                    new String[]{Manifest.permission.RECORD_AUDIO},
-                    MIC_PERMISSION_REQUEST_CODE);
-            return true;
+              new String[]{Manifest.permission.RECORD_AUDIO},
+              MIC_PERMISSION_REQUEST_CODE);
         }
     }
 
-    private boolean isAppVisible() {
-        return ProcessLifecycleOwner
-                .get()
-                .getLifecycle()
-                .getCurrentState()
-                .isAtLeast(Lifecycle.State.STARTED);
+    void sendPhoneCallEvents(HashMap<String, Object> params) {
+        if (eventSink == null)
+            return;
+
+        eventSink.success(params);
+    }
+
+    HashMap<String, Object> callToParams (Call call) {
+
+        final HashMap<String, Object> params = new HashMap<>();
+
+        String from = "";
+        String to = "";
+
+        if (call.getFrom() != null)
+            from = call.getFrom();
+        else if (callOutgoing)
+            from = twSingleton().outgoingFromNumber;
+
+        if (call.getTo() != null)
+            to = call.getTo();
+        else if (callOutgoing)
+            to = twSingleton().outgoingToNumber;
+
+        if (from != null)
+            params.put("from", from);
+        if (to != null)
+            params.put("to", to);
+
+        if (call.getSid() != null)
+            params.put("sid", call.getSid());
+
+        params.put("direction", (callOutgoing ? CallDirection.outgoing.name() : CallDirection.incoming.name()));
+
+        return params;
+    }
+
+    void sendAudioDeviceInfo(List<? extends AudioDevice> audioDevices, AudioDevice selectedDevice) {
+        boolean hasBluetooth = false;
+        for (AudioDevice a : audioDevices) {
+            if (a instanceof AudioDevice.BluetoothHeadset) {
+                hasBluetooth = true;
+                break;
+            }
+        }
+        // Send event to client to let it know of the new audio status
+        final HashMap<String, Object> params = new HashMap<>();
+        params.put("event",  CallState.audio_route_change.name());
+        params.put("bluetooth_available",  hasBluetooth);
+        params.put("speaker_on",  selectedDevice instanceof AudioDevice.Speakerphone);
+        params.put("devices",  audioDevicesToJSON(audioDevices, selectedDevice));
+
+        Log.i(TAG, "Audio device changed, params: " + params);
+        sendPhoneCallEvents(params);
+    }
+
+    private List<HashMap<String, Object>> audioDevicesToJSON(List<? extends AudioDevice> audioDevices, AudioDevice selectedDevice) {
+
+        // Send event to client to let it know of the new audio status
+        final ArrayList<HashMap<String, Object>> audioDevicesList = new ArrayList<HashMap<String, Object>>();
+
+        if (audioDevices != null) {
+            for (AudioDevice audioDevice : audioDevices) {
+
+                final HashMap<String, Object> audioDeviceJSON = new HashMap<>();
+                audioDeviceJSON.put("id",  getAudioDeviceID(audioDevice));
+                audioDeviceJSON.put("name",  audioDevice.getName());
+                audioDeviceJSON.put("selected",  selectedDevice != null ? audioDevice.equals(selectedDevice) : false);
+                audioDeviceJSON.put("type",  getAudioDeviceType(audioDevice));
+                audioDevicesList.add(audioDeviceJSON);
+            }
+        }
+        return audioDevicesList;
+    }
+
+    static String getAudioDeviceType(AudioDevice audioDevice) {
+        if (audioDevice instanceof AudioDevice.BluetoothHeadset) {
+            return "bluetooth";
+        } else if (audioDevice instanceof AudioDevice.WiredHeadset) {
+            return "wired_headset";
+        } else if (audioDevice instanceof AudioDevice.Earpiece) {
+            return "earpiece";
+        } else if (audioDevice instanceof AudioDevice.Speakerphone) {
+            return "speaker";
+        }
+        return null;
+    }
+
+    // NOTE: Currently the device ID is the same as the device name,
+    //       however, by using this method if that changes all we have
+    //       to do is modify this one function.
+    private String getAudioDeviceID(AudioDevice audioDevice) {
+        return audioDevice.getName();
+    }
+
+    private void selectAudioDevice(String deviceID) {
+        List<AudioDevice> availableAudioDevices = audioSwitch().getAvailableAudioDevices();
+        AudioDevice currentDevice = audioSwitch().getSelectedAudioDevice();
+
+        // Look for device with selected ID
+        for (AudioDevice a : availableAudioDevices) {
+            String id = getAudioDeviceID(a);
+            if (id.equals(deviceID)) {
+                Log.i(TAG, "Switching from " + currentDevice.getName() + " to " + a.getName());
+                audioSwitch().selectDevice(a);
+                break;
+            }
+        }
     }
 }

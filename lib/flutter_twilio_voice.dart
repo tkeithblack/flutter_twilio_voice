@@ -1,12 +1,21 @@
+// ignore_for_file: non_constant_identifier_names
+
 import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:collection/collection.dart';
+import 'package:synchronized/synchronized.dart';
 
-enum EventChannelMessageType { log, call_state, token }
 enum CallState {
   ringing,
   connected,
+  reconnecting,
+  reconnected,
+  connect_failed,
+  call_invite,
+  call_invite_canceled,
+  call_reject,
   call_ended,
   unhold,
   hold,
@@ -14,343 +23,442 @@ enum CallState {
   mute,
   speaker_on,
   speaker_off,
-  answer
+  audio_route_change,
+  call_quality_warning
 }
 enum CallDirection { incoming, outgoing }
 
-class EventChannelMessage {
-  final EventChannelMessageType type;
-  final String serializedPayload;
+enum AudioDeviceType { bluetooth, wired_headset, earpiece, speaker, unknown }
 
-  EventChannelMessage(this.type, this.serializedPayload);
+class AudioDevice {
+  AudioDevice();
+  String? id;
+  String? name;
+  AudioDeviceType type = AudioDeviceType.unknown;
+  bool? selected;
+
+  factory AudioDevice.fromJson(Map<dynamic, dynamic> json) {
+    var audioDevice = AudioDevice()
+      ..name = json['name'] as String
+      ..selected = json['selected'] as bool
+      ..id = json['id'];
+
+    switch (json['type']) {
+      case 'bluetooth':
+        audioDevice.type = AudioDeviceType.bluetooth;
+        break;
+      case 'wired_headset':
+        audioDevice.type = AudioDeviceType.wired_headset;
+        break;
+      case 'earpiece':
+        audioDevice.type = AudioDeviceType.earpiece;
+        break;
+      case 'speaker':
+        audioDevice.type = AudioDeviceType.speaker;
+        break;
+      default:
+        break;
+    }
+    return audioDevice;
+  }
+
+  IconData getDeviceIcon() {
+    var icon = Icons.volume_up;
+    switch (type) {
+      case AudioDeviceType.bluetooth:
+        icon = Icons.bluetooth_audio;
+        break;
+      case AudioDeviceType.wired_headset:
+        icon = Icons.headset;
+        break;
+      case AudioDeviceType.earpiece:
+        icon = Icons.phone_in_talk;
+        break;
+      case AudioDeviceType.speaker:
+        icon = Icons.volume_up;
+        break;
+      case AudioDeviceType.unknown:
+        icon = Icons.phone_in_talk;
+        break;
+    }
+    return icon;
+  }
+
+  factory AudioDevice.copy(AudioDevice device) {
+    return AudioDevice()
+      ..id = device.id
+      ..name = device.name
+      ..type = device.type
+      ..selected = device.selected;
+  }
+
+  void printProperties() {
+    print('Name: $name, id: $id, selected: $selected, type: $type');
+  }
 }
-
-class LogEntry {
-  final String severity;
-  final String message;
-  final String exception;
-
-  LogEntry(this.severity, this.message, [this.exception]);
-}
-
-typedef OnDeviceTokenChanged = Function(String token);
 
 class FlutterTwilioVoice {
-  static const MethodChannel _channel =
+  static final String ACTION_ACCEPT = "ACTION_ACCEPT";
+  static final String ACTION_REJECT = "ACTION_REJECT";
+  static final String ACTION_INCOMING_CALL_NOTIFICATION =
+      "ACTION_INCOMING_CALL_NOTIFICATION";
+  static final String ACTION_INCOMING_CALL = "ACTION_INCOMING_CALL";
+  static final String ACTION_CANCEL_CALL = "ACTION_CANCEL_CALL";
+  static final String ACTION_FCM_TOKEN = "ACTION_FCM_TOKEN";
+
+  static final String ANDROID_CALLINVITE_INTENT_ACTION =
+      "com.flutter.android.twilio.callinvite_message";
+
+  final MethodChannel _channel =
       const MethodChannel('flutter_twilio_voice/messages');
 
-  static const EventChannel _eventChannel =
+  final EventChannel _eventChannel =
       EventChannel('flutter_twilio_voice/events');
 
-  static Stream<CallState> _callStateMessages;
-  static Stream<LogEntry> _logEntryMessages;
-  static Stream<String> _deviceTokenMessages;
-  static Stream<EventChannelMessage> _eventChannelMessages;
-  static String callFrom;
-  static String callTo;
-  static int callStartedOn;
-  static CallDirection callDirection = CallDirection.incoming;
-  static OnDeviceTokenChanged deviceTokenChanged;
+  Stream<CallState>? _onCallStateChanged;
+  String? callFrom;
+  String? callTo;
+  String? sid;
+  bool _muted = false;
+  bool _onHold = false;
+  bool _speakerOn = false;
+  bool _bluetoothAvailable = false;
+  var _audioDevices = <AudioDevice>[];
 
-  static Stream<EventChannelMessage> get eventChannelMessages {
-    if (_eventChannelMessages == null) {
-      _eventChannelMessages = _eventChannel
+  final _audioDevicesLock =
+      Lock(); // used to syncronize access to _audioDevices (critical section)
+
+  int? callStartedOn;
+  CallDirection _callDirection = CallDirection.incoming;
+
+  Stream<CallState>? get onCallStateChanged {
+    if (_onCallStateChanged == null) {
+      _onCallStateChanged = _eventChannel
           .receiveBroadcastStream()
-          .map((event) => _parseEventChannelMessage(event));
+          .map((dynamic event) => _parseCallState(event));
     }
-    return _eventChannelMessages;
+    return _onCallStateChanged;
   }
 
-  static Stream<CallState> get callStateMessages {
-    if (_callStateMessages == null) {
-      _callStateMessages = eventChannelMessages
-          .where((event) => event.type != EventChannelMessageType.log)
-          .map((event) => _parseCallStateMessage(event.serializedPayload));
-    }
-    return _callStateMessages;
+  Future<bool> tokens({required String accessToken, String? fcmToken}) async {
+    return await _channel.invokeMethod('tokens',
+        <String, dynamic>{"accessToken": accessToken, "fcmToken": fcmToken});
   }
 
-  static Stream<String> get deviceTokenMessages {
-    if (_deviceTokenMessages == null) {
-      _deviceTokenMessages = eventChannelMessages
-          .where((event) => event.type == EventChannelMessageType.token)
-          .map((event) => _parseDeviceTokenMessage(event.serializedPayload));
-
-      // historical behavior - on subscription, we start a listener to fire the old event.
-      // Technically, the only event is no longer needed - as we have streams.
-      _deviceTokenMessages.listen((event) => deviceTokenChanged(event));
-    }
-    return _deviceTokenMessages;
+  Future<bool> unregister() async {
+    return await _channel.invokeMethod('unregister', <String, dynamic>{});
   }
 
-  static var _logStreamController = StreamController<LogEntry>();
-
-  static Stream<LogEntry> get logEntryMessages {
-    if (_logEntryMessages == null) {
-      eventChannelMessages
-          .where((event) => event.type == EventChannelMessageType.log)
-          .map((event) => _parseLogEntryMessage(event.serializedPayload))
-          .listen((event) => _logStreamController.add(event));
-
-      _logEntryMessages = _logStreamController.stream;
-    }
-    return _logEntryMessages;
-  }
-
-  static void setOnDeviceTokenChanged(OnDeviceTokenChanged deviceTokenChanged) {
-    FlutterTwilioVoice.deviceTokenChanged = deviceTokenChanged;
-  }
-
-  static Future<bool> tokens(
-      {@required String accessToken, String deviceToken}) {
-    assert(accessToken != null);
-    return _channel.invokeMethod('tokens', <String, dynamic>{
-      "accessToken": accessToken,
-      "deviceToken": deviceToken
-    });
-  }
-
-  static Future<bool> unregister(String accessToken) {
-    return _channel.invokeMethod(
-        'unregister', <String, dynamic>{"accessToken": accessToken});
-  }
-
-  static Future<bool> makeCall(
-      {@required String from,
-      @required String to,
-      Map<String, dynamic> extraOptions}) {
-    assert(to != null);
-    assert(from != null);
+  Future<bool> makeCall(
+      {required String from,
+      required String to,
+      String? toDisplayName,
+      Map<String, dynamic>? extraOptions}) async {
     var options = extraOptions != null ? extraOptions : Map<String, dynamic>();
-    options['From'] = from;
-    options['To'] = to;
+    options['from'] = from;
+    options['to'] = to;
+    options['toDisplayName'] = toDisplayName;
     callFrom = from;
     callTo = to;
-    callDirection = CallDirection.outgoing;
-    return _channel.invokeMethod('makeCall', options);
+    _callDirection = CallDirection.outgoing;
+    return await _channel.invokeMethod('makeCall', options);
   }
 
-  static Future<bool> hangUp() {
-    return _channel.invokeMethod('hangUp', <String, dynamic>{});
+  Future<bool> hangUp() async {
+    return await _channel.invokeMethod('hangUp', <String, dynamic>{});
   }
 
-  static Future<bool> answer() {
-    return _channel.invokeMethod('answer', <String, dynamic>{});
+  Future<bool> answer() async {
+    return await _channel.invokeMethod('answer', <String, dynamic>{});
   }
 
-  static Future<bool> holdCall() {
-    return _channel.invokeMethod('holdCall', <String, dynamic>{});
+  Future<bool> reject() async {
+    return await _channel.invokeMethod('reject', <String, dynamic>{});
   }
 
-  static Future<bool> muteCall() {
-    return _channel.invokeMethod('muteCall', <String, dynamic>{});
+  Future<bool> holdCall() async {
+    return await _channel.invokeMethod('holdCall', <String, dynamic>{});
   }
 
-  static Future<bool> toggleSpeaker(bool speakerIsOn) {
-    assert(speakerIsOn != null);
-    return _channel.invokeMethod(
+  Future<bool> toggleMute() async {
+    return await _channel.invokeMethod('muteCall', <String, dynamic>{});
+  }
+
+  // This method toggles between the speaker and earpiece (or external selcted device)
+  Future<bool> toggleSpeaker(bool speakerIsOn) async {
+    return await _channel.invokeMethod(
         'toggleSpeaker', <String, dynamic>{"speakerIsOn": speakerIsOn});
   }
 
-  static Future<bool> sendDigits(String digits) {
-    assert(digits != null);
-    return _channel
+  // This method selects a specific audio device based on a device ID.
+  Future<bool> selectAudioDevice(String deviceID) async {
+    return await _channel.invokeMethod(
+        'selectAudioDevice', <String, dynamic>{"deviceID": deviceID});
+  }
+
+  Future<bool> sendDigits(String digits) async {
+    return await _channel
         .invokeMethod('sendDigits', <String, dynamic>{"digits": digits});
   }
 
-  static Future<bool> requestBackgroundPermissions() {
-    return _channel.invokeMethod('requestBackgroundPermissions', {});
+  Future<bool> isOnCall() async {
+    return await _channel.invokeMethod('isOnCall', <String, dynamic>{});
   }
 
-  static Future<bool> requiresBackgroundPermissions() {
-    return _channel.invokeMethod('requiresBackgroundPermissions', {});
+  Future<void> replayCallConnection() async {
+    return await _channel
+        .invokeMethod('replayCallConnection', <String, dynamic>{});
   }
 
-  static Future<bool> isOnCall() {
-    return _channel.invokeMethod('isOnCall', <String, dynamic>{});
+  Future<void>? refreshAudioRoute() async {
+    return await _channel
+        .invokeMethod('refreshAudioRoute', <String, dynamic>{});
   }
 
-  static Future<bool> registerClient(String clientId, String clientName) {
-    return _channel.invokeMethod('registerClient',
-        <String, dynamic>{"id": clientId, "name": clientName});
+  // Legacy Methods replaced by new version ---------
+  String getFrom() {
+    // replaced by getter fromNumber
+    return fromNumber;
   }
 
-  static Future<bool> unregisterClient(String clientId) {
-    return _channel
-        .invokeMethod('unregisterClient', <String, dynamic>{"id": clientId});
+  String getTo() {
+    // replaced by getter toNumber
+    return toNumber;
   }
 
-  static Future<bool> setDefaultCallerName(String callerName) {
-    return _channel.invokeMethod(
-        'defaultCaller', <String, dynamic>{"defaultCaller": callerName});
+  // replaced by toggleMute same functionality, more intuatuve name.
+  Future<bool> muteCall() {
+    return toggleMute();
+  }
+  // End legacy calls --------------------------------
+
+  DateTime? get callStartDate {
+    if (callStartedOn != null)
+      return DateTime.fromMillisecondsSinceEpoch(callStartedOn!);
+
+    return null;
   }
 
-  /// Twilio can pass custom parameters (key-value pairs) with the CallInvite.
-  /// Here we can pass a Caller Id (a friendly name) from the TWIML application server.
-  /// Use this to set the key name, used to lookup the caller id in the custom parameters dictionary.
-  static Future<bool> setCallerIdCustomParameterKey(String key) {
-    return _channel.invokeMethod(
-        'callerIdCustomParameterKey', <String, dynamic>{"key": key});
+  // same as getFrom in getter form
+  String get fromNumber {
+    return callFrom ?? "";
   }
 
-  static Future<bool> hasMicAccess() {
-    return _channel.invokeMethod('hasMicPermission', {});
+  // same as getTo in getter form
+  String get toNumber {
+    return callTo ?? "";
   }
 
-  static Future<bool> requestMicAccess() {
-    return _channel.invokeMethod('requestMicPermission', {});
+  String get externalNumber {
+    return _callDirection == CallDirection.incoming ? fromNumber : toNumber;
   }
 
-  static Future showBackgroundCallUI() {
-    return _channel.invokeMethod("backgroundCallUI", {});
+  String get internalNumber {
+    return _callDirection == CallDirection.outgoing ? fromNumber : toNumber;
   }
 
-  static String getFrom() {
-    return callFrom;
+  String? get callSid {
+    return sid;
   }
 
-  static String getTo() {
-    return callTo;
+  bool get isMuted {
+    return _muted;
   }
 
-  static int getCallStartedOn() {
+  bool get isOnHold {
+    return _onHold;
+  }
+
+  bool get isSpeakerOn {
+    return _speakerOn;
+  }
+
+  bool get isBluetoothAvailable {
+    return _bluetoothAvailable;
+  }
+
+  bool get isExterenalAudioRouteAvailable {
+    print('inside isExterenalAudioRouteAvailable');
+
+    // Don't access _audioDevices if it's being update.
+    if (!_audioDevicesLock.locked) {
+      for (var device in _audioDevices) {
+        if (device.type == AudioDeviceType.bluetooth ||
+            device.type == AudioDeviceType.wired_headset) {
+          return true;
+        }
+      }
+    }
+    return false;
+  }
+
+  AudioDevice? get selectedAudioDevice {
+    print('inside selectedAudioDevice');
+    return audioDevices.firstWhereOrNull((element) => element.selected == true);
+  }
+
+  List<AudioDevice> get audioDevices {
+    print('inside get audioDevices');
+
+    // Rather than returning our internal variable we will
+    // return a copy of the audioDevices list.
+    var devicesCopy = <AudioDevice>[];
+
+    // Don't access _audioDevices if it's being update.
+    // We can't do a synclock here because this is a non-async funciton.
+    if (!_audioDevicesLock.locked) {
+      _audioDevices.forEach((element) {
+        devicesCopy.add(AudioDevice.copy(element));
+      });
+    }
+    return devicesCopy;
+  }
+
+  int? getCallStartedOn() {
     return callStartedOn;
   }
 
-  static CallDirection getCallDirection() {
-    return callDirection;
+  CallDirection get callDirection {
+    return _callDirection;
   }
 
-  static List<String> splitAtFirstPipe(String sz) =>
-      sz.split(RegExp(r"(?<!.*\|.*)\|")).toList();
+  CallState _parseCallState(dynamic params) {
+    print("_parseCallState - params: $params");
+    var state = params['event'];
 
-  static LogEntry _parseLogEntryMessage(String serializedMessage) {
-    // _logStreamController.add(LogEntry('WARN', 'custom log message'));
-    var levelAndMessage = splitAtFirstPipe(serializedMessage);
-    var level = '';
-    var message = '';
-    if (levelAndMessage.length == 1) {
-      message = levelAndMessage[0];
-    } else if (levelAndMessage.length == 2) {
-      level = levelAndMessage[0];
-      message = levelAndMessage[1];
-    }
-    return LogEntry(level, message);
-  }
-
-  static EventChannelMessage _parseEventChannelMessage(
-      String serializedMessage) {
-    var typeAndPayload = splitAtFirstPipe(serializedMessage);
-    switch (typeAndPayload[0]) {
-      case "DEVICETOKEN":
-        return EventChannelMessage(
-            EventChannelMessageType.token, typeAndPayload[1]);
-      case "LOG":
-        return EventChannelMessage(
-            EventChannelMessageType.log, typeAndPayload[1]);
-      case "Connected":
-      case "Ringing":
-      case "Answer":
-      case "Call Ended":
-      case "Hold":
-      case "Unhold":
-      case "Mute":
-      case "Unmute":
-      case "Speaker On":
-      case "Speaker Off":
-        return EventChannelMessage(
-            EventChannelMessageType.call_state, serializedMessage);
+    switch (state) {
+      case "call_invite":
+        _setCallInfoFromParams(params: params);
+        callStartedOn = DateTime.now().millisecondsSinceEpoch;
+        callInvite(
+            customParameters: params["customParameters"] ?? [],
+            replay: params['replay'] ?? false,
+            pluginDisplayedAnswerScreen:
+                params['pluginDisplayedAnswerScreen'] ?? false);
+        return CallState.call_invite;
+      case "call_invite_canceled":
+        _setCallInfoFromParams(params: params);
+        callStartedOn = DateTime.now().millisecondsSinceEpoch;
+        callInviteCancel(errorMessage: params["error"]);
+        return CallState.call_invite_canceled;
+      case "call_reject":
+        _setCallInfoFromParams(params: params);
+        callReject(customParameters: params["customParameters"]);
+        return CallState.call_reject;
+      case "ringing":
+        _setCallInfoFromParams(params: params);
+        callStartedOn = DateTime.now().millisecondsSinceEpoch;
+        callDidStartRinging();
+        return CallState.ringing;
+      case "connected":
+        _setCallInfoFromParams(params: params);
+        if (callStartedOn == null) {
+          callStartedOn = DateTime.now().millisecondsSinceEpoch;
+        }
+        callDidConnect();
+        return CallState.connected;
+      case "reconnecting":
+        _setCallInfoFromParams(params: params);
+        callReconnecting(errorMsg: params["error"]);
+        return CallState.reconnecting;
+      case "reconnected":
+        _setCallInfoFromParams(params: params);
+        callReconnected();
+        return CallState.reconnected;
+      case "connect_failed":
+        _setCallInfoFromParams(params: params);
+        callConnectFailed(errorMsg: params["error"]);
+        return CallState.connect_failed;
+      case "call_ended":
+        callStartedOn = null;
+        callFrom = null;
+        callTo = null;
+        _callDirection = CallDirection.incoming;
+        callEnded(errorMsg: params["error"]);
+        return CallState.call_ended;
+      case "unhold":
+        _onHold = false;
+        callHoldChanged(isOnHold: _onHold);
+        return CallState.unhold;
+      case "hold":
+        _onHold = true;
+        callHoldChanged(isOnHold: _onHold);
+        return CallState.hold;
+      case "unmute":
+        _muted = false;
+        callMuteChanged(isMuted: _muted);
+        return CallState.unmute;
+      case "mute":
+        _muted = true;
+        callMuteChanged(isMuted: _muted);
+        return CallState.mute;
+      case "speaker_on":
+        return CallState.speaker_on;
+      case "speaker_off":
+        return CallState.speaker_off;
+      case "audio_route_change":
+        _updateAudioRoute(params: params);
+        return CallState.audio_route_change;
+      case "call_quality_warning":
+        callQualityWarning(
+            warning: params["warning"], isCleared: params['isCleared']);
+        return CallState.call_quality_warning;
       default:
-        return EventChannelMessage(EventChannelMessageType.log,
-            'WARN|Unknown event type ${typeAndPayload[0]}');
+        print('$state is not a valid CallState.');
+        throw ArgumentError('$state is not a valid CallState.');
     }
   }
 
-  static String _parseDeviceTokenMessage(String serializedPayload) {
-    return serializedPayload;
+  void _setCallInfoFromParams({required Map<dynamic, dynamic> params}) {
+    if (params['from'] != null) callFrom = _prettyPrintNumber(params['from']);
+    if (params['to'] != null) callTo = _prettyPrintNumber(params['to']);
+    if (params['sid'] != null) sid = params['sid'];
+    if (params['muted'] != null) _muted = params['muted'];
+    if (params['onhold'] != null) _onHold = params['onhold'];
+
+    if (params["direction"] != null) {
+      _callDirection = "incoming" == params["direction"]
+          ? CallDirection.incoming
+          : CallDirection.outgoing;
+    }
   }
 
-  static CallState _parseCallStateMessage(String serializedPayload) {
-    CallState result;
-    var stateAndPayload = splitAtFirstPipe(serializedPayload);
-    try {
-      var state = stateAndPayload[0];
-      var payload =
-          stateAndPayload.length == 2 ? stateAndPayload[1].split('|') : [];
-      switch (state) {
-        case 'Connected':
-          callFrom = _prettyPrintNumber(payload[0]);
-          callTo = _prettyPrintNumber(payload[1]);
-          callDirection = ("Incoming" == payload[2]
-              ? CallDirection.incoming
-              : CallDirection.outgoing);
-          if (callStartedOn == null) {
-            callStartedOn = DateTime.now().millisecondsSinceEpoch;
-          }
-          print(
-              'Connected - From: $callFrom, To: $callTo, StartOn: $callStartedOn, Direction: $callDirection');
-          result = CallState.connected;
-          break;
-        case 'Ringing':
-          callFrom = _prettyPrintNumber(payload[0]);
-          callTo = _prettyPrintNumber(payload[1]);
-          if (payload.length > 2) {
-            callDirection = 'Incoming' == payload[2]
-                ? CallDirection.incoming
-                : CallDirection.outgoing;
-          }
+  void _updateAudioRoute({required Map<dynamic, dynamic> params}) async {
+    // Update audio devices list.
+    print('inside _updateAudioRoute(): params = $params');
 
-          print(
-              'Ringing - From: $callFrom, To: $callTo, Direction: $callDirection');
-          result = CallState.ringing;
-          break;
-        case 'Answer':
-          callFrom = _prettyPrintNumber(payload[0]);
-          callTo = _prettyPrintNumber(payload[1]);
-          callDirection = CallDirection.incoming;
-          print(
-              'Answer - From: $callFrom, To: $callTo, Direction: $callDirection');
-          result = CallState.answer;
-          break;
-        case 'Call Ended':
-          callStartedOn = null;
-          callFrom = null;
-          callTo = null;
-          callDirection = CallDirection.incoming;
-          result = CallState.call_ended;
-          break;
-        case 'Unhold':
-          result = CallState.unhold;
-          break;
-        case 'Hold':
-          result = CallState.hold;
-          break;
-        case 'Unmute':
-          result = CallState.unmute;
-          break;
-        case 'Mute':
-          result = CallState.mute;
-          break;
-        case 'Speaker On':
-          result = CallState.speaker_on;
-          break;
-        case 'Speaker Off':
-          result = CallState.speaker_off;
-          break;
-        default:
-          print('$state is not a valid CallState.');
-          throw ArgumentError('$state is not a valid CallState.');
+    print('_updateAudioRoute: clearing _audioDevices, before:');
+    if (!_audioDevicesLock.locked) {
+      _audioDevices.forEach((element) => element.printProperties());
+    } else {
+      print('Cannot display devices, _audioDevices in sync lock');
+    }
+
+    await _audioDevicesLock.synchronized(() async {
+      _audioDevices.clear();
+      var devices = params['devices'] as List<dynamic>?;
+      if (devices != null) {
+        for (var element in devices) {
+          var device = AudioDevice.fromJson(element);
+          _audioDevices.add(device);
+        }
       }
-    } catch (e) {
-      _logStreamController.add(LogEntry(
-          'ERROR', 'Unable to parse CallState message "$serializedPayload"'));
+    });
+
+    print('_updateAudioRoute: updated _audioDevices, after:');
+    if (!_audioDevicesLock.locked) {
+      _audioDevices.forEach((element) => element.printProperties());
+    } else {
+      print('Cannot display devices, _audioDevices in sync lock');
     }
-    return result;
+
+    _bluetoothAvailable = params["bluetooth_available"] ?? false;
+    _speakerOn = params["speaker_on"] ?? false;
+    callAudioRouteChanged(
+        isBluetoothAvailable: _bluetoothAvailable, isSpeaker: _speakerOn);
   }
 
-  static String _prettyPrintNumber(String phoneNumber) {
-    if (null == phoneNumber || phoneNumber == '') return '';
-
+  String _prettyPrintNumber(String phoneNumber) {
     if (phoneNumber.indexOf('client:') > -1) {
       return phoneNumber.split(':')[1];
     }
@@ -374,4 +482,23 @@ class FlutterTwilioVoice {
         "-" +
         phoneNumber.substring(start + 6);
   }
+
+  // Notification methods that can be overridden
+  void callInvite(
+      {required Map<dynamic, dynamic> customParameters,
+      required bool replay,
+      required bool pluginDisplayedAnswerScreen}) {}
+  void callInviteCancel({String? errorMessage}) {}
+  void callReject({Map<dynamic, dynamic>? customParameters}) {}
+  void callDidStartRinging() {}
+  void callDidConnect() {}
+  void callReconnected() {}
+  void callReconnecting({String? errorMsg}) {}
+  void callConnectFailed({String? errorMsg}) {}
+  void callEnded({String? errorMsg}) {}
+  void callHoldChanged({required bool isOnHold}) {}
+  void callMuteChanged({required bool isMuted}) {}
+  void callQualityWarning({required String warning, required bool isCleared}) {}
+  void callAudioRouteChanged(
+      {required bool isBluetoothAvailable, required bool isSpeaker}) {}
 }
